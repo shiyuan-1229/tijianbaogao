@@ -1,0 +1,39 @@
+{
+  "dataset_path": "C:\\Users\\86159\\AppData\\Local\\Temp\\pytest-of-86159\\pytest-4\\test_quality_service_scans_dat0\\sample-dataset",
+  "evidence_images": [
+    {
+      "issue_id": "r-format-002-1-02496166_report",
+      "file_name": "02496166_report.pdf",
+      "page": "1",
+      "rule_id": "R-FORMAT-002",
+      "issue_type": "页数边界",
+      "status": "needs_review",
+      "preview_image_url": "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-1.png",
+      "preview_image_urls": [
+        "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-1.png",
+        "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-2.png",
+        "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-3.png"
+      ],
+      "preview_page_count": 3,
+      "finding_type": null,
+      "bbox": null
+    },
+    {
+      "issue_id": "r-ocr-001-2-02496166_report",
+      "file_name": "02496166_report.pdf",
+      "page": "1",
+      "rule_id": "R-OCR-001",
+      "issue_type": "OCR 待处理",
+      "status": "needs_review",
+      "preview_image_url": "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-1.png",
+      "preview_image_urls": [
+        "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-1.png",
+        "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-2.png",
+        "/api/quality/pdf-pages/0a789e340a7b9fb4e78d654c-page-3.png"
+      ],
+      "preview_page_count": 3,
+      "finding_type": null,
+      "bbox": null
+    }
+  ]
+}

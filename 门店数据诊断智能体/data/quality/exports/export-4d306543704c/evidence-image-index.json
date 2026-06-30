@@ -1,0 +1,22 @@
+{
+  "dataset_path": "data\\quality\\imports\\quality-import-086c5187cbc8",
+  "evidence_images": [
+    {
+      "issue_id": "r-vision-001-1-02250201",
+      "file_name": "02250201.pdf",
+      "page": "2",
+      "rule_id": "R-VISION-001",
+      "issue_type": "连续页面内容重复",
+      "status": "needs_review",
+      "preview_image_url": "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+      "preview_image_urls": [
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-1.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-3.jpg"
+      ],
+      "preview_page_count": 3,
+      "finding_type": "format",
+      "bbox": null
+    }
+  ]
+}

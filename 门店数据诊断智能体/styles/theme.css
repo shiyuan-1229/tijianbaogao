@@ -1,0 +1,49 @@
+.stApp {
+    background:
+        radial-gradient(circle at top right, rgba(22, 124, 116, 0.08), transparent 28%),
+        linear-gradient(180deg, #f8fbfa 0%, #f5f7f7 100%);
+}
+
+.shell-card {
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(31, 42, 42, 0.08);
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    margin: 0.75rem 0;
+    box-shadow: 0 8px 24px rgba(31, 42, 42, 0.05);
+}
+
+.shell-card h3 {
+    margin: 0 0 0.35rem;
+    color: #1f2a2a;
+    font-size: 1rem;
+}
+
+.shell-card p {
+    margin: 0;
+    color: #4a5c5b;
+    line-height: 1.5;
+}
+
+.status-badge {
+    display: inline-block;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 0.15rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.operator-note {
+    padding: 0.85rem 1rem;
+    margin: 0.75rem 0;
+    border-radius: 14px;
+    background: rgba(22, 124, 116, 0.08);
+    color: #224847;
+    border: 1px solid rgba(22, 124, 116, 0.16);
+}
+
+.operator-note strong {
+    color: #163d3b;
+}

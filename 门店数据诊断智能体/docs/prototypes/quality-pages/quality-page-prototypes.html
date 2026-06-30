@@ -1,0 +1,211 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>体检报告质检页面原型</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dfe4ea;
+      --line-strong: #c8d1dc;
+      --ink: #151922;
+      --text: #303846;
+      --muted: #667386;
+      --teal: #0b9a9a;
+      --teal-soft: #e6f7f7;
+      --red: #dc2626;
+      --red-soft: #fff1f2;
+      --orange: #ea580c;
+      --orange-soft: #fff7ed;
+      --blue: #2563eb;
+      --blue-soft: #eff6ff;
+      --green: #15803d;
+      --green-soft: #ecfdf3;
+      --purple: #7c3aed;
+      --purple-soft: #f5f3ff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e8edf4; color: var(--text); font-family: Aptos, "Segoe UI", "Noto Sans SC", "Microsoft YaHei", sans-serif; }
+    .prototype { width: 1440px; height: 900px; display: grid; grid-template-columns: 220px 1fr; background: var(--bg); overflow: hidden; border-bottom: 1px solid #cbd5e1; }
+    .sidebar { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+    .brand { height: 78px; display: flex; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+    .logo { width: 38px; height: 38px; border-radius: 8px; background: var(--teal); color: white; display: grid; place-items: center; font-weight: 800; }
+    .brand-title { font-weight: 700; color: var(--ink); font-size: 16px; }
+    .brand-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .nav { padding: 18px 12px; display: grid; gap: 6px; }
+    .nav-item { height: 40px; border-radius: 7px; display: flex; align-items: center; gap: 10px; padding: 0 12px; color: #4b5565; font-size: 14px; }
+    .nav-item.active { color: #087f7f; background: var(--teal-soft); font-weight: 700; }
+    .nav-icon { width: 18px; height: 18px; border: 1.7px solid currentColor; border-radius: 4px; display: inline-block; position: relative; }
+    .sidebar-foot { margin-top: auto; border-top: 1px solid var(--line); padding: 14px 12px; font-size: 13px; color: #4b5565; }
+    .main { min-width: 0; display: grid; grid-template-rows: 64px 1fr; }
+    .topbar { background: var(--panel); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 0 22px; }
+    .title { font-size: 20px; font-weight: 800; color: var(--ink); }
+    .subtitle { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .actions { display: flex; align-items: center; gap: 10px; }
+    .btn { height: 34px; border-radius: 7px; border: 1px solid var(--line-strong); background: white; padding: 0 13px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); font-weight: 650; }
+    .btn.primary { background: var(--teal); border-color: var(--teal); color: white; }
+    .btn.danger { background: #e14444; border-color: #e14444; color: white; }
+    .btn.blue { color: var(--blue); border-color: #bfdbfe; background: var(--blue-soft); }
+    .btn.ghost { background: #f8fafc; }
+    .content { padding: 14px; overflow: hidden; }
+    .page-grid { display: grid; gap: 12px; height: 100%; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    .panel.pad { padding: 14px; }
+    .panel-head { padding: 13px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .panel-title { font-weight: 800; color: var(--ink); font-size: 16px; }
+    .panel-note { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .toolbar { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+    .field { height: 34px; min-width: 124px; border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 0 10px; color: var(--text); display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+    .field.wide { min-width: 236px; color: #7b8493; }
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .stat { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 12px; min-height: 82px; }
+    .stat-label { color: var(--muted); font-size: 12px; }
+    .stat-value { color: var(--ink); font-size: 26px; line-height: 1.1; font-weight: 800; margin-top: 7px; }
+    .stat-hint { color: var(--muted); font-size: 12px; margin-top: 5px; }
+    .table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .table th { text-align: left; color: var(--muted); font-weight: 700; background: #f7f9fb; border-bottom: 1px solid var(--line); padding: 10px 11px; white-space: nowrap; }
+    .table td { border-bottom: 1px solid #edf1f5; padding: 10px 11px; color: var(--text); vertical-align: middle; }
+    .table tr.selected { background: #eefafa; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; padding: 3px 7px; min-width: 38px; font-size: 12px; font-weight: 750; border: 1px solid transparent; white-space: nowrap; }
+    .b-red { color: var(--red); background: var(--red-soft); border-color: #fecaca; }
+    .b-orange { color: var(--orange); background: var(--orange-soft); border-color: #fed7aa; }
+    .b-blue { color: var(--blue); background: var(--blue-soft); border-color: #bfdbfe; }
+    .b-green { color: var(--green); background: var(--green-soft); border-color: #bbf7d0; }
+    .b-purple { color: var(--purple); background: var(--purple-soft); border-color: #ddd6fe; }
+    .b-gray { color: #596579; background: #f7f9fb; border-color: var(--line); }
+    .risk-card { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 12px; }
+    .risk-top { display: flex; justify-content: space-between; align-items: center; font-weight: 800; color: var(--ink); }
+    .risk-desc { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 8px; min-height: 36px; }
+    .preview-page { background: #fff; border: 1px solid var(--line-strong); border-radius: 5px; margin: 12px; height: 520px; position: relative; padding: 28px; box-shadow: inset 0 0 0 1px #f5f7fb; }
+    .paper-title { text-align: center; font-weight: 800; margin-bottom: 18px; color: #202733; }
+    .paper-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; color: #4b5565; margin-bottom: 16px; }
+    .paper-table { border: 1px solid var(--line); display: grid; grid-template-columns: 1.3fr .8fr 1fr .7fr; font-size: 12px; }
+    .paper-table div { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 8px; min-height: 32px; }
+    .mark { position: absolute; border: 2px solid #e14444; background: rgba(225, 68, 68, .09); border-radius: 3px; }
+    .mark.blue { border-color: #2563eb; background: rgba(37, 99, 235, .08); }
+    .mark.orange { border-color: #f97316; background: rgba(249, 115, 22, .1); }
+    .thumbs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--line); }
+    .thumb { height: 62px; border: 1px solid var(--line); border-radius: 5px; background: #f8fafc; display: grid; place-items: center; font-size: 12px; color: var(--muted); }
+    .thumb.active { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); font-weight: 800; }
+    .stack { display: grid; gap: 10px; }
+    .evidence { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 12px; }
+    .evidence h4 { margin: 0 0 8px; font-size: 13px; color: var(--ink); }
+    .evidence p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+    .queue-item { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: white; display: grid; gap: 7px; }
+    .queue-item.active { background: #eefafa; border-color: #9ddede; }
+    .split-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .small { font-size: 12px; color: var(--muted); }
+    .rule-list { display: grid; gap: 9px; padding: 12px; }
+    .rule-row { border: 1px solid var(--line); border-radius: 8px; padding: 11px; background: white; display: grid; grid-template-columns: 110px 1fr 82px 82px; gap: 10px; align-items: center; font-size: 12.5px; }
+    .rule-row.active { border-color: #9ddede; background: #eefafa; }
+    .export-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: white; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .check { width: 18px; height: 18px; border: 1px solid var(--teal); border-radius: 4px; display: grid; place-items: center; color: var(--teal); font-weight: 900; flex: 0 0 auto; }
+    .timeline { display: grid; gap: 10px; }
+    .timeline-item { display: grid; grid-template-columns: 92px 1fr auto; gap: 12px; border-bottom: 1px solid #edf1f5; padding: 10px 0; font-size: 12.5px; }
+    .section-label { font-weight: 800; color: var(--ink); margin-bottom: 8px; }
+    .callout { border: 1px solid #bde8cf; background: #ecfbf2; color: #166534; border-radius: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5; }
+    .placeholder-chart { height: 148px; border: 1px solid var(--line); border-radius: 8px; background: repeating-linear-gradient(90deg, #f8fafc 0 38px, #fff 38px 76px); display: flex; align-items: end; gap: 14px; padding: 18px; }
+    .bar { width: 30px; border-radius: 5px 5px 0 0; background: var(--teal); opacity: .85; }
+  </style>
+</head>
+<body>
+
+<section class="prototype" id="issues">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">✓</div><div><div class="brand-title">体检报告质检</div><div class="brand-sub">数据合规筛查工作台</div></div></div>
+    <nav class="nav">
+      <div class="nav-item"><span class="nav-icon"></span>批量检测</div><div class="nav-item active"><span class="nav-icon"></span>问题清单</div><div class="nav-item"><span class="nav-icon"></span>单报告详情</div><div class="nav-item"><span class="nav-icon"></span>人工复核</div><div class="nav-item"><span class="nav-icon"></span>规则库</div><div class="nav-item"><span class="nav-icon"></span>报告导出</div>
+    </nav><div class="sidebar-foot">系统管理</div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><div><div class="title">问题清单</div><div class="subtitle">全局分诊，按风险类型、规则和状态定位问题，不在这里做人工结论。</div></div><div class="actions"><button class="btn ghost">批量标记</button><button class="btn primary">进入详情</button></div></div>
+    <div class="content"><div class="page-grid" style="grid-template-columns: 1fr 360px; grid-template-rows: 112px 52px 1fr;">
+      <section class="cards" style="grid-column: 1 / 3;">
+        <div class="stat"><div class="stat-label">疑似缺字</div><div class="stat-value">12</div><div class="stat-hint">OCR 或页面标注证据不足</div></div>
+        <div class="stat"><div class="stat-label">页数边界</div><div class="stat-value">8</div><div class="stat-hint">低于 5 页或报告拆分可疑</div></div>
+        <div class="stat"><div class="stat-label">疑似未脱敏</div><div class="stat-value">9</div><div class="stat-hint">身份证、手机号、姓名等可见</div></div>
+        <div class="stat"><div class="stat-label">历史对比</div><div class="stat-value">8</div><div class="stat-hint">缺少前次指标或对比表</div></div>
+      </section>
+      <section class="panel pad" style="grid-column: 1 / 3; padding: 8px 10px;"><div class="toolbar"><div class="field">问题类型 <span>全部</span></div><div class="field">严重程度 <span>全部</span></div><div class="field">年龄段 <span>全部</span></div><div class="field">处理状态 <span>全部</span></div><div class="field wide">请输入文件名、规则或证据关键词</div><button class="btn">筛选</button></div></section>
+      <section class="panel">
+        <div class="panel-head"><div><div class="panel-title">问题列表</div><div class="panel-note">用于批量分诊和跳转详情</div></div><span class="badge b-orange">37 条</span></div>
+        <table class="table"><thead><tr><th>类型</th><th>严重</th><th>报告文件</th><th>页码</th><th>证据摘要</th><th>规则</th><th>状态</th></tr></thead><tbody>
+          <tr class="selected"><td><span class="badge b-red">未脱敏</span></td><td><span class="badge b-red">高</span></td><td>王五_体检报告.pdf</td><td>2</td><td>顶部身份证号完整可见</td><td>R-PRIVACY-003</td><td><span class="badge b-orange">待复核</span></td></tr>
+          <tr><td><span class="badge b-purple">疑似缺字</span></td><td><span class="badge b-red">高</span></td><td>张三_体检报告.pdf</td><td>3</td><td>谷丙转氨酶项目名疑似缺字</td><td>R-OCR-001</td><td><span class="badge b-orange">待复核</span></td></tr>
+          <tr><td><span class="badge b-orange">页数边界</span></td><td><span class="badge b-red">高</span></td><td>李四_体检报告.pdf</td><td>1</td><td>PDF 仅 3 页，低于边界要求</td><td>R-FORMAT-002</td><td><span class="badge b-purple">标记争议</span></td></tr>
+          <tr><td><span class="badge b-blue">历史对比</span></td><td><span class="badge b-blue">中</span></td><td>赵六_体检报告.pdf</td><td>5</td><td>血糖较上次升高但缺少前次表</td><td>R-HISTORY-004</td><td><span class="badge b-green">已确认</span></td></tr>
+          <tr><td><span class="badge b-purple">疑似缺字</span></td><td><span class="badge b-blue">中</span></td><td>刘七_体检报告.pdf</td><td>7</td><td>白细胞计数一栏 OCR 不完整</td><td>R-OCR-001</td><td><span class="badge b-orange">待复核</span></td></tr>
+          <tr><td><span class="badge b-red">未脱敏</span></td><td><span class="badge b-red">高</span></td><td>孙八_体检报告.pdf</td><td>1</td><td>手机号末四位之外信息可见</td><td>R-PRIVACY-003</td><td><span class="badge b-orange">待复核</span></td></tr>
+          <tr><td><span class="badge b-orange">页数边界</span></td><td><span class="badge b-green">低</span></td><td>王五_体检报告.pdf</td><td>3</td><td>表格被切分到下一页</td><td>R-FORMAT-002</td><td><span class="badge b-gray">已驳回</span></td></tr>
+        </tbody></table>
+      </section>
+      <aside class="panel"><div class="panel-head"><div><div class="panel-title">分诊证据摘要</div><div class="panel-note">只辅助判断下一步，不做复核结论</div></div></div><div class="stack" style="padding: 12px;">
+        <div class="risk-card"><div class="risk-top">当前选中 <span class="badge b-red">未脱敏</span></div><div class="risk-desc">王五_体检报告.pdf 第 2 页，顶部身份信息疑似未按规则遮挡。</div></div>
+        <div class="evidence"><h4>命中规则</h4><p>R-PRIVACY-003：身份证号、手机号等敏感信息展示时应完成脱敏处理。</p></div>
+        <div class="evidence"><h4>下一步</h4><p>进入单报告详情查看页面框选、OCR 文本和结构化数据对应关系。</p></div>
+        <button class="btn primary" style="justify-content:center; width:100%;">查看单报告详情</button>
+      </div></aside>
+    </div></div>
+  </main>
+</section>
+
+<section class="prototype" id="detail">
+  <aside class="sidebar"><div class="brand"><div class="logo">✓</div><div><div class="brand-title">体检报告质检</div><div class="brand-sub">数据合规筛查工作台</div></div></div><nav class="nav"><div class="nav-item"><span class="nav-icon"></span>批量检测</div><div class="nav-item"><span class="nav-icon"></span>问题清单</div><div class="nav-item active"><span class="nav-icon"></span>单报告详情</div><div class="nav-item"><span class="nav-icon"></span>人工复核</div><div class="nav-item"><span class="nav-icon"></span>规则库</div><div class="nav-item"><span class="nav-icon"></span>报告导出</div></nav><div class="sidebar-foot">系统管理</div></aside>
+  <main class="main"><div class="topbar"><div><div class="title">单报告详情</div><div class="subtitle">围绕一份报告核验证据链，证明每个判断都能追溯到文件、页码、字段和规则。</div></div><div class="actions"><button class="btn">上一份</button><button class="btn">下一份</button><button class="btn primary">进入人工复核</button></div></div>
+    <div class="content"><div class="page-grid" style="grid-template-columns: 474px 1fr 340px;">
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">PDF 页面预览</div><div class="panel-note">王五_体检报告.pdf，第 2 / 5 页</div></div><span class="badge b-red">未脱敏标注</span></div><div class="preview-page"><div class="paper-title">XX体检中心检验报告单</div><div class="paper-meta"><span>姓名：王五</span><span>性别：男</span><span>档案号：02496166</span></div><div class="paper-table"><div>项目名称</div><div>结果</div><div>参考范围</div><div>单位</div><div>谷丙转氨酶</div><div>32</div><div>9-50</div><div>U/L</div><div>甘油三酯</div><div>1.82</div><div>0.56-1.70</div><div>mmol/L</div><div>空腹血糖</div><div style="color:#dc2626;font-weight:800;">6.58</div><div>3.90-6.10</div><div>mmol/L</div></div><div class="mark" style="left:274px; top:95px; width:128px; height:24px;"></div><div class="mark blue" style="left:54px; top:252px; width:310px; height:38px;"></div></div><div class="thumbs"><div class="thumb">第1页</div><div class="thumb active">第2页</div><div class="thumb">第3页</div><div class="thumb">第4页</div><div class="thumb">第5页</div></div></section>
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">证据核查工作区</div><div class="panel-note">OCR、Excel、规则和历史线索并排校验</div></div></div><div class="stack" style="padding: 12px;">
+        <div class="evidence"><h4>OCR 文本片段</h4><p>第 2 页顶部识别到连续 18 位数字，位置接近身份信息栏。OCR 置信度 0.92，需要人工确认是否属于身份证号未脱敏。</p></div>
+        <div class="evidence"><h4>结构化 Excel 对照</h4><p>ArchivesNum=02496166，ItemResultChar 中存在空腹血糖偏高记录，PDF 页面与 Excel 档案号匹配。</p></div>
+        <div class="evidence"><h4>命中规则</h4><p>R-PRIVACY-003，敏感身份信息应保留前后必要位数，中间脱敏。当前页面未满足脱敏展示条件。</p></div>
+        <div class="evidence"><h4>同报告问题</h4><p><span class="badge b-red">未脱敏</span> <span class="badge b-orange">页数边界</span> <span class="badge b-blue">历史对比</span></p></div>
+        <div class="callout">详情页不直接给最终复核结论，只把证据链整理清楚，降低人工复核时的来回跳转。</div>
+      </div></section>
+      <aside class="panel"><div class="panel-head"><div><div class="panel-title">AI 判断与建议</div><div class="panel-note">面向复核人的证据摘要</div></div></div><div class="stack" style="padding: 12px;">
+        <div class="evidence"><h4>AI 判断</h4><p>页面存在疑似未脱敏个人身份信息，风险等级为高。</p></div>
+        <div class="evidence"><h4>处理建议</h4><p>进入人工复核。不自动修改 PDF，不生成脱敏后文件。</p></div>
+        <div class="evidence"><h4>证据完整性</h4><p><span class="badge b-green">PDF 页图</span> <span class="badge b-green">OCR 文本</span> <span class="badge b-green">规则依据</span> <span class="badge b-blue">Excel 对照</span></p></div>
+        <button class="btn primary" style="justify-content:center; width:100%;">提交到人工复核</button>
+      </div></aside>
+    </div></div>
+  </main>
+</section>
+
+<section class="prototype" id="review">
+  <aside class="sidebar"><div class="brand"><div class="logo">✓</div><div><div class="brand-title">体检报告质检</div><div class="brand-sub">数据合规筛查工作台</div></div></div><nav class="nav"><div class="nav-item"><span class="nav-icon"></span>批量检测</div><div class="nav-item"><span class="nav-icon"></span>问题清单</div><div class="nav-item"><span class="nav-icon"></span>单报告详情</div><div class="nav-item active"><span class="nav-icon"></span>人工复核</div><div class="nav-item"><span class="nav-icon"></span>规则库</div><div class="nav-item"><span class="nav-icon"></span>报告导出</div></nav><div class="sidebar-foot">系统管理</div></aside>
+  <main class="main"><div class="topbar"><div><div class="title">人工复核</div><div class="subtitle">只处理人工决策：确认、驳回、标记争议和备注，记录复核差异。</div></div><div class="actions"><button class="btn">只看高风险</button><button class="btn primary">保存复核记录</button></div></div>
+    <div class="content"><div class="page-grid" style="grid-template-columns: 330px 1fr 360px; grid-template-rows: 96px 1fr;">
+      <section class="cards" style="grid-column: 1 / 4; grid-template-columns: repeat(4,1fr);"><div class="stat"><div class="stat-label">待我复核</div><div class="stat-value">12</div><div class="stat-hint">按高风险优先</div></div><div class="stat"><div class="stat-label">争议问题</div><div class="stat-value">3</div><div class="stat-hint">需要补证或二审</div></div><div class="stat"><div class="stat-label">已确认</div><div class="stat-value">9</div><div class="stat-hint">进入不合规清单</div></div><div class="stat"><div class="stat-label">已驳回</div><div class="stat-value">2</div><div class="stat-hint">保留驳回原因</div></div></section>
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">复核队列</div><div class="panel-note">从待复核和争议开始</div></div></div><div class="stack" style="padding: 12px;"><div class="queue-item active"><div class="split-row"><b>王五_体检报告.pdf</b><span class="badge b-red">高</span></div><div class="small">疑似未脱敏，第 2 页，R-PRIVACY-003</div><span class="badge b-orange">待复核</span></div><div class="queue-item"><div class="split-row"><b>李四_体检报告.pdf</b><span class="badge b-red">高</span></div><div class="small">页数边界，第 1 页，R-FORMAT-002</div><span class="badge b-purple">标记争议</span></div><div class="queue-item"><div class="split-row"><b>张三_体检报告.pdf</b><span class="badge b-blue">中</span></div><div class="small">疑似缺字，第 7 页，R-OCR-001</div><span class="badge b-orange">待复核</span></div></div></section>
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">当前问题证据</div><div class="panel-note">复核时只展示与决策有关的证据</div></div></div><div class="preview-page" style="height: 390px;"><div class="paper-title">XX体检中心检验报告单</div><div class="paper-meta"><span>姓名：王五</span><span>性别：男</span><span>档案号：02496166</span></div><div class="paper-table"><div>项目</div><div>结果</div><div>范围</div><div>单位</div><div>身份证号</div><div>123456...</div><div>需脱敏</div><div>-</div><div>空腹血糖</div><div style="color:#dc2626;font-weight:800;">6.58</div><div>3.90-6.10</div><div>mmol/L</div></div><div class="mark" style="left:246px; top:95px; width:132px; height:24px;"></div></div><div class="stack" style="padding: 0 12px 12px;"><div class="evidence"><h4>AI 判断</h4><p>疑似未脱敏，置信度 0.96。命中身份证号展示规则。</p></div><div class="evidence"><h4>复核备注记录</h4><p>复核人 A：确认问题成立。复核人 B：建议补充第 1 页对比。</p></div></div></section>
+      <aside class="panel"><div class="panel-head"><div><div class="panel-title">复核决策</div><div class="panel-note">决策结果会写入人工复核记录</div></div></div><div class="stack" style="padding: 12px;"><button class="btn danger" style="justify-content:center; width:100%; height:42px;">确认问题</button><button class="btn" style="justify-content:center; width:100%; height:42px;">驳回判断</button><button class="btn blue" style="justify-content:center; width:100%; height:42px;">标记争议</button><div class="evidence"><h4>备注</h4><p>身份证号中间部分未遮挡，建议列入未脱敏问题清单。无需自动修改原 PDF。</p></div><div class="evidence"><h4>沉淀到规则</h4><p>该复核结果可作为 R-PRIVACY-003 的样例证据，用于后续规则说明。</p></div></div></aside>
+    </div></div>
+  </main>
+</section>
+
+<section class="prototype" id="rules">
+  <aside class="sidebar"><div class="brand"><div class="logo">✓</div><div><div class="brand-title">体检报告质检</div><div class="brand-sub">数据合规筛查工作台</div></div></div><nav class="nav"><div class="nav-item"><span class="nav-icon"></span>批量检测</div><div class="nav-item"><span class="nav-icon"></span>问题清单</div><div class="nav-item"><span class="nav-icon"></span>单报告详情</div><div class="nav-item"><span class="nav-icon"></span>人工复核</div><div class="nav-item active"><span class="nav-icon"></span>规则库</div><div class="nav-item"><span class="nav-icon"></span>报告导出</div></nav><div class="sidebar-foot">系统管理</div></aside>
+  <main class="main"><div class="topbar"><div><div class="title">规则库</div><div class="subtitle">维护可执行的质检规则，说明来源、检测方法、失败条件和是否需要人工复核。</div></div><div class="actions"><button class="btn">导入需求文档</button><button class="btn primary">新增规则</button></div></div>
+    <div class="content"><div class="page-grid" style="grid-template-columns: 270px 1fr 370px;">
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">规则分类</div><div class="panel-note">按检测维度治理规则</div></div></div><div class="stack" style="padding: 12px;"><div class="queue-item active"><div class="split-row"><b>脱敏风险</b><span class="badge b-red">8</span></div><div class="small">姓名、身份证、手机号、机构编码</div></div><div class="queue-item"><div class="split-row"><b>页数与格式</b><span class="badge b-orange">6</span></div><div class="small">页数边界、表格断页、扫描质量</div></div><div class="queue-item"><div class="split-row"><b>内容完整性</b><span class="badge b-purple">10</span></div><div class="small">缺字、缺页、缺少总结和模块</div></div><div class="queue-item"><div class="split-row"><b>历史对比</b><span class="badge b-blue">5</span></div><div class="small">三次记录、五年内、指标趋势</div></div></div></section>
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">规则列表</div><div class="panel-note">规则既来自需求文档，也来自人工复核沉淀</div></div><div class="field wide">搜索规则 ID 或失败条件</div></div><div class="rule-list"><div class="rule-row active"><b>R-PRIVACY-003</b><span>敏感身份信息脱敏</span><span class="badge b-red">高</span><span class="badge b-green">启用</span></div><div class="rule-row"><b>R-FORMAT-002</b><span>PDF 页数边界检查</span><span class="badge b-red">高</span><span class="badge b-green">启用</span></div><div class="rule-row"><b>R-OCR-001</b><span>OCR 证据完整性</span><span class="badge b-blue">中</span><span class="badge b-orange">待补齐</span></div><div class="rule-row"><b>R-HISTORY-004</b><span>历史指标对比证据</span><span class="badge b-blue">中</span><span class="badge b-green">启用</span></div><div class="rule-row"><b>R-EXCEL-002</b><span>结构化异常项识别</span><span class="badge b-blue">中</span><span class="badge b-green">启用</span></div></div><div style="padding:0 12px 12px;"><div class="placeholder-chart"><div class="bar" style="height:70px"></div><div class="bar" style="height:110px"></div><div class="bar" style="height:48px"></div><div class="bar" style="height:92px"></div><div class="bar" style="height:126px"></div><div class="bar" style="height:60px"></div></div></div></section>
+      <aside class="panel"><div class="panel-head"><div><div class="panel-title">规则详情</div><div class="panel-note">R-PRIVACY-003</div></div></div><div class="stack" style="padding: 12px;"><div class="evidence"><h4>来源</h4><p>体检报告需求.docx，历史评估结论，人工复核样例 12 条。</p></div><div class="evidence"><h4>失败条件</h4><p>身份证号、手机号、姓名、医生名、单位名等敏感信息在报告页面中完整或过度展示。</p></div><div class="evidence"><h4>检测方法</h4><p>PDF 转图后通过 OCR 和视觉模型定位敏感文本，保留页面框选坐标，不执行脱敏修改。</p></div><div class="evidence"><h4>人工复核要求</h4><p><span class="badge b-green">需要复核</span> <span class="badge b-red">高严重程度</span></p></div><button class="btn primary" style="justify-content:center; width:100%;">保存规则说明</button></div></aside>
+    </div></div>
+  </main>
+</section>
+
+<section class="prototype" id="export">
+  <aside class="sidebar"><div class="brand"><div class="logo">✓</div><div><div class="brand-title">体检报告质检</div><div class="brand-sub">数据合规筛查工作台</div></div></div><nav class="nav"><div class="nav-item"><span class="nav-icon"></span>批量检测</div><div class="nav-item"><span class="nav-icon"></span>问题清单</div><div class="nav-item"><span class="nav-icon"></span>单报告详情</div><div class="nav-item"><span class="nav-icon"></span>人工复核</div><div class="nav-item"><span class="nav-icon"></span>规则库</div><div class="nav-item active"><span class="nav-icon"></span>报告导出</div></nav><div class="sidebar-foot">系统管理</div></aside>
+  <main class="main"><div class="topbar"><div><div class="title">报告导出</div><div class="subtitle">把筛查结果、复核记录、规则命中统计和证据索引整理成可交付文件。</div></div><div class="actions"><button class="btn">预览交付包</button><button class="btn primary">导出结果</button></div></div>
+    <div class="content"><div class="page-grid" style="grid-template-columns: 420px 1fr 360px;">
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">交付物选择</div><div class="panel-note">选择本次要导出的文件</div></div></div><div class="stack" style="padding: 12px;"><div class="export-card"><div style="display:flex; gap:10px;"><span class="check">✓</span><div><b>第三批数据检测报告</b><div class="small">PDF，总结、方法、风险分布和结论</div></div></div><span class="badge b-green">已选</span></div><div class="export-card"><div style="display:flex; gap:10px;"><span class="check">✓</span><div><b>不合规问题清单</b><div class="small">Excel，已确认问题和证据摘要</div></div></div><span class="badge b-green">已选</span></div><div class="export-card"><div style="display:flex; gap:10px;"><span class="check">✓</span><div><b>可能合规清单</b><div class="small">人工驳回和低风险样本</div></div></div><span class="badge b-green">已选</span></div><div class="export-card"><div style="display:flex; gap:10px;"><span class="check">✓</span><div><b>人工复核记录</b><div class="small">确认、驳回、争议和备注</div></div></div><span class="badge b-green">已选</span></div><div class="export-card"><div style="display:flex; gap:10px;"><span class="check">✓</span><div><b>证据截图索引</b><div class="small">文件、页码、框选位置和规则 ID</div></div></div><span class="badge b-green">已选</span></div></div></section>
+      <section class="panel"><div class="panel-head"><div><div class="panel-title">导出预览</div><div class="panel-note">面向交付的汇总，不再做分析操作</div></div><span class="badge b-blue">第三批数据</span></div><div class="cards" style="padding:12px; grid-template-columns: repeat(4,1fr);"><div class="stat"><div class="stat-label">总问题</div><div class="stat-value">37</div><div class="stat-hint">进入导出范围</div></div><div class="stat"><div class="stat-label">已确认</div><div class="stat-value">9</div><div class="stat-hint">不合规清单</div></div><div class="stat"><div class="stat-label">待复核</div><div class="stat-value">12</div><div class="stat-hint">单独列出</div></div><div class="stat"><div class="stat-label">争议</div><div class="stat-value">3</div><div class="stat-hint">附复核意见</div></div></div><div style="padding:0 12px 12px;"><table class="table"><thead><tr><th>导出章节</th><th>内容</th><th>数量</th><th>格式</th></tr></thead><tbody><tr><td>风险摘要</td><td>缺字、页数、未脱敏、历史对比</td><td>4 类</td><td>PDF</td></tr><tr><td>问题明细</td><td>文件、页码、证据、规则、状态</td><td>37 条</td><td>Excel</td></tr><tr><td>复核记录</td><td>复核人、决策、备注、时间</td><td>24 条</td><td>Excel</td></tr><tr><td>规则统计</td><td>规则命中、严重程度、来源</td><td>15 条</td><td>Excel</td></tr><tr><td>证据索引</td><td>页面截图路径和框选坐标</td><td>31 张</td><td>ZIP</td></tr></tbody></table></div><div style="padding:0 12px 12px;"><div class="callout">导出页只处理交付范围和文件格式，不提供复核按钮，避免和人工复核页面重复。</div></div></section>
+      <aside class="panel"><div class="panel-head"><div><div class="panel-title">导出记录</div><div class="panel-note">保留每次交付版本</div></div></div><div style="padding: 12px;"><div class="timeline"><div class="timeline-item"><span class="small">2025-05-22</span><b>第三批检测报告</b><span class="badge b-green">完成</span></div><div class="timeline-item"><span class="small">2025-05-22</span><b>不合规问题清单</b><span class="badge b-green">完成</span></div><div class="timeline-item"><span class="small">2025-05-21</span><b>人工复核记录</b><span class="badge b-blue">复核版</span></div><div class="timeline-item"><span class="small">2025-05-20</span><b>规则命中统计</b><span class="badge b-gray">草稿</span></div></div><div class="stack" style="margin-top: 14px;"><div class="evidence"><h4>本次导出配置</h4><p>包含已确认、待复核、标记争议和已驳回记录。证据截图以索引方式随 ZIP 输出。</p></div><button class="btn primary" style="justify-content:center; width:100%;">生成交付包</button></div></div></aside>
+    </div></div>
+  </main>
+</section>
+
+</body>
+</html>

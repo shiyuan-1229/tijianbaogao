@@ -1,0 +1,21 @@
+{
+  "dataset_path": "C:\\Users\\86159\\AppData\\Local\\Temp\\pytest-of-86159\\pytest-3\\test_quality_service_scans_dat0\\sample-dataset",
+  "generated_at": "2026-06-30T08:13:52.059238+00:00",
+  "rule_hits": [
+    {
+      "rule_id": "R-EXCEL-001",
+      "rule_name": null,
+      "hit_count": 1
+    },
+    {
+      "rule_id": "R-FORMAT-002",
+      "rule_name": null,
+      "hit_count": 1
+    },
+    {
+      "rule_id": "R-OCR-001",
+      "rule_name": null,
+      "hit_count": 1
+    }
+  ]
+}

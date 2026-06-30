@@ -1,0 +1,46 @@
+# ===== Node / Next.js 构建产物（队友重新 npm install / npm run dev 会自动生成） =====
+node_modules/
+.next/
+out/
+build/
+dist/
+.turbo/
+coverage/
+test-results/
+playwright-report/
+
+# ===== Python 编译缓存（运行 Python 时自动生成） =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+
+# ===== 测试运行时临时残留 =====
+.pytest-tmp/
+codex_pytest_tmp/
+
+# ===== OCR / 视觉模型缓存（后端重新扫描 PDF 时会再生） =====
+data/quality/pdf-pages/
+
+# ===== 日志文件（启动服务时自动生成） =====
+*.log
+*.err.log
+*.out.log
+logs/
+
+# ===== IDE 与系统垃圾 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== 临时备份文件 =====
+*.bak
+*.tmp
+*.old

@@ -1,0 +1,26 @@
+﻿:root {
+  font-family:
+    Aptos,
+    "Segoe UI",
+    "Noto Sans SC",
+    "PingFang SC",
+    sans-serif;
+  background: rgb(var(--app-bg));
+}
+
+body {
+  background: rgb(var(--app-bg));
+}
+
+::selection {
+  background: rgba(var(--accent), 0.18);
+}
+
+.shell-bg {
+  background: rgb(var(--app-bg));
+}
+
+.shell-sidebar {
+  background: rgb(var(--panel-bg));
+  border-right: 1px solid rgb(var(--border));
+}

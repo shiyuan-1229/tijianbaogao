@@ -1,0 +1,88 @@
+{
+  "dataset_path": "data\\quality\\imports\\quality-import-086c5187cbc8",
+  "evidence_images": [
+    {
+      "issue_id": "r-vision-001-1-02250201",
+      "file_name": "02250201.pdf",
+      "page": "1",
+      "rule_id": "R-VISION-001",
+      "issue_type": "页码/边界异常",
+      "status": "needs_review",
+      "preview_image_url": "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-1.jpg",
+      "preview_image_urls": [
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-1.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-3.jpg"
+      ],
+      "preview_page_count": 3,
+      "finding_type": "format",
+      "bbox": [
+        88.5,
+        94.0,
+        3.5,
+        2.0
+      ]
+    },
+    {
+      "issue_id": "r-vision-001-2-02250201",
+      "file_name": "02250201.pdf",
+      "page": "2",
+      "rule_id": "R-VISION-001",
+      "issue_type": "重复页面/页数异常",
+      "status": "needs_review",
+      "preview_image_url": "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+      "preview_image_urls": [
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-1.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-3.jpg"
+      ],
+      "preview_page_count": 3,
+      "finding_type": "format",
+      "bbox": null
+    },
+    {
+      "issue_id": "r-vision-001-3-02250201",
+      "file_name": "02250201.pdf",
+      "page": "1",
+      "rule_id": "R-VISION-001",
+      "issue_type": "患者身份信息缺失",
+      "status": "needs_review",
+      "preview_image_url": "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-1.jpg",
+      "preview_image_urls": [
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-1.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-3.jpg"
+      ],
+      "preview_page_count": 3,
+      "finding_type": "missing_text",
+      "bbox": [
+        4.0,
+        10.8,
+        52.0,
+        4.2
+      ]
+    },
+    {
+      "issue_id": "r-vision-001-4-02250201",
+      "file_name": "02250201.pdf",
+      "page": "2",
+      "rule_id": "R-VISION-001",
+      "issue_type": "患者身份信息缺失",
+      "status": "needs_review",
+      "preview_image_url": "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+      "preview_image_urls": [
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-1.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-2.jpg",
+        "/api/quality/pdf-pages/1090673414172db849348289-embedded-page-3.jpg"
+      ],
+      "preview_page_count": 3,
+      "finding_type": "missing_text",
+      "bbox": [
+        4.0,
+        10.8,
+        52.0,
+        4.2
+      ]
+    }
+  ]
+}

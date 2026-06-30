@@ -1,3 +1,0 @@
-INFO:     127.0.0.1:58283 - "GET /health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58293 - "GET /api/quality/datasets/scan?dataset_path=D%3A%5C%E6%A1%8C%E9%9D%A2%5CAI%E6%99%BA%E8%83%BD%E4%BD%93%5C%E9%97%A8%E5%BA%97%E6%95%B0%E6%8D%AE%E8%AF%8A%E6%96%AD%E6%99%BA%E8%83%BD%E4%BD%93%5C.tmp%5Cquality-http-smoke HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58310 - "GET /api/quality/datasets/scan?dataset_path=D%3A%5C%E6%A1%8C%E9%9D%A2%5CAI%E6%99%BA%E8%83%BD%E4%BD%93%5C%E9%97%A8%E5%BA%97%E6%95%B0%E6%8D%AE%E8%AF%8A%E6%96%AD%E6%99%BA%E8%83%BD%E4%BD%93%5C.tmp%5Cquality-http-smoke HTTP/1.1" 200 OK

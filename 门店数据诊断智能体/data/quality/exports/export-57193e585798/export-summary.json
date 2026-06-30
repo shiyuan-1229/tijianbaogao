@@ -1,0 +1,65 @@
+{
+  "dataset_path": "C:\\Users\\86159\\AppData\\Local\\Temp\\pytest-of-86159\\pytest-3\\test_quality_service_scans_dat0\\sample-dataset",
+  "generated_at": "2026-06-30T08:13:52.059238+00:00",
+  "total_issues": 3,
+  "confirmed_issues": 0,
+  "rejected_issues": 0,
+  "pending_issues": 3,
+  "review_record_count": 0,
+  "evidence_image_count": 3,
+  "sections": [
+    {
+      "key": "third-batch-report",
+      "title": "第三批数据检测报告",
+      "item_count": 1,
+      "description": "覆盖 1 个年龄段、1 份档案、3 个问题。"
+    },
+    {
+      "key": "non-compliant",
+      "title": "不合规问题清单",
+      "item_count": 0,
+      "description": "人工已确认的问题，适合进入不合规导出清单。"
+    },
+    {
+      "key": "possible-compliant",
+      "title": "可能合规清单",
+      "item_count": 0,
+      "description": "人工已驳回的问题，保留为可能合规样本。"
+    },
+    {
+      "key": "needs-review",
+      "title": "需人工复核清单",
+      "item_count": 3,
+      "description": "仍待人工确认或存在争议的问题。"
+    },
+    {
+      "key": "review-records",
+      "title": "人工复核记录",
+      "item_count": 0,
+      "description": "真实人工复核动作与备注记录。"
+    },
+    {
+      "key": "rule-hit-stats",
+      "title": "规则命中统计",
+      "item_count": 3,
+      "description": "按规则 ID 汇总当前数据集的命中次数。"
+    }
+  ],
+  "rule_hits": [
+    {
+      "rule_id": "R-EXCEL-001",
+      "rule_name": null,
+      "hit_count": 1
+    },
+    {
+      "rule_id": "R-FORMAT-002",
+      "rule_name": null,
+      "hit_count": 1
+    },
+    {
+      "rule_id": "R-OCR-001",
+      "rule_name": null,
+      "hit_count": 1
+    }
+  ]
+}

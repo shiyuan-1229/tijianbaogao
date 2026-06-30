@@ -1,0 +1,91 @@
+
+> store-ai-clinic-web@0.1.0 dev
+> next dev -p 3001
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3001
+   - Network:      http://10.30.0.18:3001
+
+ ✓ Starting...
+ ✓ Ready in 10.7s
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 14.2s (643 modules)
+ GET / 404 in 15373ms
+ ○ Compiling /agent ...
+ ✓ Compiled /agent in 5.3s (947 modules)
+ GET /agent 200 in 17407ms
+ ○ Compiling /api/conversations ...
+ ✓ Compiled /api/conversations in 2.6s (972 modules)
+ GET /api/conversations 502 in 3831ms
+ GET /agent 200 in 1238ms
+ GET /agent 200 in 334ms
+ GET /api/conversations 502 in 162ms
+ ○ Compiling /tasks ...
+ ✓ Compiled /tasks in 4s (992 modules)
+ ○ Compiling /brands ...
+ GET /tasks 200 in 5048ms
+ ✓ Compiled /tasks/[taskId] in 17.1s (1090 modules)
+ GET /settings 200 in 15913ms
+ GET /brands 200 in 18816ms
+ GET /tasks 200 in 17817ms
+ GET /knowledge 200 in 18342ms
+ GET /brands 200 in 536ms
+ GET /agent 200 in 549ms
+ GET /settings 200 in 493ms
+ GET /knowledge 200 in 1023ms
+ GET /tasks 200 in 575ms
+ GET /brands 200 in 428ms
+ GET /knowledge 200 in 902ms
+ GET /tasks 200 in 554ms
+ GET /tasks 200 in 648ms
+ GET /knowledge 200 in 981ms
+ GET /tasks 200 in 401ms
+ GET /tasks 200 in 174ms
+ GET /knowledge 200 in 832ms
+ GET /tasks 200 in 114ms
+ GET /tasks 200 in 103ms
+ GET /tasks 200 in 110ms
+ GET /tasks/task-daily-001 200 in 16120ms
+ GET /tasks/task-weekly-003 200 in 15654ms
+ POST /api/conversations 502 in 95ms
+ ✓ Compiled in 2.4s (471 modules)
+ GET /agent 200 in 598ms
+ GET /agent 200 in 739ms
+ ✓ Compiled in 1201ms (997 modules)
+ ✓ Compiled in 1239ms (1013 modules)
+ ✓ Compiled in 567ms (1013 modules)
+ GET /agent 500 in 2130ms
+ ✓ Compiled in 813ms (1013 modules)
+ GET /agent 500 in 1796ms
+ ✓ Compiled in 351ms (471 modules)
+ GET /agent 500 in 718ms
+ ✓ Compiled in 684ms (1013 modules)
+ GET /agent 500 in 1217ms
+ ✓ Compiled in 983ms (1014 modules)
+ GET /agent 200 in 1141ms
+ ✓ Compiled /api/conversations in 391ms (567 modules)
+ GET /api/conversations 502 in 613ms
+ ○ Compiling /quality ...
+ ✓ Compiled /quality in 1279ms (1017 modules)
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 2.3s (1364 modules)
+ GET /quality 500 in 10746ms
+ GET /quality 500 in 465ms
+ GET /agent 500 in 7351ms
+ GET /agent 500 in 466ms
+ GET /agent 500 in 1539ms
+ GET /agent 500 in 287ms
+ GET /agent 500 in 1073ms
+ GET /agent 500 in 298ms
+ GET /quality 500 in 1350ms
+ GET /quality 500 in 312ms
+ GET /quality 500 in 1358ms
+ GET /quality 500 in 352ms
+ ✓ Compiled in 3.6s (1278 modules)
+ ✓ Compiled in 2.2s (1093 modules)
+ ✓ Compiled in 1733ms (1093 modules)
+ ✓ Compiled in 1118ms (1096 modules)
+ ✓ Compiled in 937ms (1096 modules)
+ ✓ Compiled in 964ms (1098 modules)
+ ✓ Compiled in 913ms (1098 modules)
+ ✓ Compiled in 445ms (549 modules)

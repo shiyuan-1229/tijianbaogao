@@ -1,0 +1,13 @@
+
+> store-ai-clinic-web@0.1.0 dev
+> next dev -p 3011
+
+   ▲ Next.js 15.5.19
+   - Local:        http://localhost:3011
+   - Network:      http://10.118.230.43:3011
+
+ ✓ Starting...
+ ✓ Ready in 5.2s
+ ○ Compiling /quality ...
+ ✓ Compiled /quality in 2s (743 modules)
+ GET /quality 200 in 4268ms

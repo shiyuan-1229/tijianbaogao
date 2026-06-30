@@ -1,0 +1,196 @@
+ ⨯ ./features/tasks/components/task-list.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from D:\桌面\门店数据诊断\store-ai-clinic-web\features\tasks\components\task-list.tsx
+    1: 系统找不到指定的文件。 (os error 2)
+
+Import trace for requested module:
+./features/tasks/components/task-list.tsx
+./features/tasks/components/tasks-shell.tsx
+ ⨯ ./features/brands/components/brands-shell.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from D:\桌面\门店数据诊断\store-ai-clinic-web\features\brands\components\brands-shell.tsx
+    1: 系统找不到指定的文件。 (os error 2)
+
+Import trace for requested module:
+./features/brands/components/brands-shell.tsx
+ ⨯ ./features/brands/components/field-mapping-tab.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from D:\桌面\门店数据诊断\store-ai-clinic-web\features\brands\components\field-mapping-tab.tsx
+    1: 系统找不到指定的文件。 (os error 2)
+
+Import trace for requested module:
+./features/brands/components/field-mapping-tab.tsx
+./features/brands/components/brands-shell.tsx
+ ⨯ ./features/knowledge/components/knowledge-shell.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from D:\桌面\门店数据诊断\store-ai-clinic-web\features\knowledge\components\knowledge-shell.tsx
+    1: 系统找不到指定的文件。 (os error 2)
+
+Import trace for requested module:
+./features/knowledge/components/knowledge-shell.tsx
+ ⨯ Error: Cannot find module './331.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\_not-found\page.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82023)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82076) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/agent'
+}
+ ⨯ Error: Cannot find module './611.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:321)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:366) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+Error: Cannot find module './331.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\_not-found\page.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82023)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82076) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/agent'
+}
+ ⨯ Error: Cannot find module './611.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:321)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:366) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ Error: Cannot find module './331.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82023)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82076) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/agent'
+}
+ ⨯ Error: Cannot find module './611.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:321)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:366) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+Error: Cannot find module './331.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82023)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\app\(workspace)\agent\page.js:2:82076) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array],
+  page: '/agent'
+}
+ ⨯ Error: Cannot find module './611.js'
+Require stack:
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\webpack-runtime.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\require.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\load-components.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\utils.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\options.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\swc\index.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\config.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\next.js
+- D:\桌面\门店数据诊断\store-ai-clinic-web\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:321)
+    at Object.<anonymous> (D:\桌面\门店数据诊断\store-ai-clinic-web\.next\server\pages\_document.js:1:366) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+[TypeError: Cannot read properties of undefined (reading '/_app')]

@@ -1,0 +1,181 @@
+
+> store-ai-clinic-web@0.1.0 dev
+> next dev --hostname 127.0.0.1 --port 3000
+
+   ▲ Next.js 15.5.19
+   - Local:        http://127.0.0.1:3000
+   - Network:      http://127.0.0.1:3000
+
+ ✓ Starting...
+ ✓ Ready in 4.9s
+ ○ Compiling /quality ...
+ ✓ Compiled /quality in 1625ms (791 modules)
+ GET /quality 200 in 3789ms
+ ○ Compiling /api/quality/rules ...
+ ✓ Compiled /api/quality/rules in 841ms (811 modules)
+ GET /api/quality/rules?datasetPath=D%3A%5C%E6%A1%8C%E9%9D%A2%5C%E6%95%B0%E6%8D%AE%5C5%E4%BA%BA 200 in 1088ms
+ ○ Compiling /knowledge ...
+ ✓ Compiled /knowledge in 706ms (787 modules)
+ GET /knowledge 200 in 737ms
+ GET /knowledge 200 in 2072ms
+ GET /knowledge 200 in 58ms
+ ✓ Compiled /brands in 494ms (789 modules)
+ GET /brands 200 in 681ms
+ GET /brands 200 in 63ms
+ GET /knowledge 200 in 91ms
+ ○ Compiling /tasks ...
+ ✓ Compiled /tasks in 674ms (787 modules)
+ GET /tasks 200 in 655ms
+ GET /tasks 200 in 1856ms
+ ✓ Compiled /knowledge in 197ms (469 modules)
+ GET /knowledge 200 in 1033ms
+ ✓ Compiled in 3.3s (803 modules)
+ ✓ Compiled in 308ms (334 modules)
+ ✓ Compiled /brands in 312ms (469 modules)
+ GET /brands 200 in 1219ms
+ GET /brands 200 in 70ms
+ ○ Compiling /agent ...
+ ✓ Compiled /agent in 594ms (789 modules)
+ GET /agent 200 in 811ms
+ ✓ Compiled in 621ms (334 modules)
+ ○ Compiling /api/quality/rules ...
+ ✓ Compiled /api/quality/rules in 782ms (475 modules)
+ ✓ Compiled (494 modules)
+ GET /api/quality/rules?datasetPath=D%3A%5C%E6%A1%8C%E9%9D%A2%5C%E6%95%B0%E6%8D%AE%5C5%E4%BA%BA 200 in 1416ms
+ GET /quality 200 in 2848ms
+ ✓ Compiled /tasks in 398ms (496 modules)
+ GET /tasks 200 in 598ms
+ GET /quality 200 in 252ms
+ GET /quality 200 in 1165ms
+ GET /tasks 200 in 56ms
+ ○ Compiling /settings ...
+ ✓ Compiled /settings in 745ms (787 modules)
+ GET /settings 200 in 70ms
+ GET /settings 200 in 1931ms
+ ✓ Compiled /tasks in 293ms (469 modules)
+ GET /tasks 200 in 1326ms
+ ✓ Compiled in 644ms (334 modules)
+ ✓ Compiled in 280ms (334 modules)
+ ✓ Compiled in 211ms (334 modules)
+ ○ Compiling /quality ...
+ ✓ Compiled /quality in 689ms (475 modules)
+ GET /quality 200 in 236ms
+ GET /quality 200 in 1667ms
+ ✓ Compiled /tasks in 223ms (477 modules)
+ GET /tasks 200 in 435ms
+ ✓ Compiled in 724ms (334 modules)
+ ✓ Compiled in 426ms (334 modules)
+ ✓ Compiled in 568ms (334 modules)
+ ○ Compiling /tasks ...
+ ✓ Compiled /tasks in 653ms (787 modules)
+ GET /tasks 200 in 2407ms
+ ✓ Compiled in 2.2s (803 modules)
+ GET /tasks 200 in 1899ms
+ ✓ Compiled in 1397ms (787 modules)
+ GET /tasks 200 in 1835ms
+ GET /tasks 200 in 1717ms
+ ✓ Compiled in 2.4s (803 modules)
+ GET /tasks 200 in 2368ms
+ GET /tasks 200 in 136ms
+ GET /tasks 200 in 362ms
+ ✓ Compiled in 2.5s (803 modules)
+ GET /tasks 200 in 2203ms
+ ✓ Compiled in 1472ms (803 modules)
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 7.5s (1134 modules)
+ GET /tasks 500 in 15877ms
+ GET /tasks 500 in 826ms
+ GET /tasks 500 in 1693ms
+ GET /tasks 500 in 315ms
+ GET /tasks 500 in 1528ms
+ GET /tasks 500 in 372ms
+ GET /tasks 500 in 1538ms
+ GET /tasks 500 in 385ms
+ ✓ Compiled in 2.1s (1150 modules)
+ ○ Compiling /_error ...
+ GET /tasks 500 in 874ms
+ GET /tasks 500 in 29ms
+ GET /tasks 500 in 136ms
+ GET /tasks 500 in 31ms
+ ✓ Compiled /_error in 1058ms (1011 modules)
+ ✓ Compiled in 709ms (1011 modules)
+ ✓ Compiled /_error in 486ms (1107 modules)
+ GET /tasks 500 in 2193ms
+ GET /tasks 500 in 339ms
+ GET /tasks 500 in 2518ms
+ GET /tasks 500 in 583ms
+ GET /tasks 500 in 1257ms
+ GET /tasks 500 in 303ms
+ ✓ Compiled in 854ms (1011 modules)
+ ✓ Compiled /_error in 322ms (1091 modules)
+ GET /tasks 500 in 1960ms
+ GET /tasks 500 in 348ms
+ ✓ Compiled in 1508ms (995 modules)
+ ✓ Compiled in 671ms (1011 modules)
+ ✓ Compiled in 840ms (1011 modules)
+ ✓ Compiled in 1009ms (1021 modules)
+ ✓ Compiled in 687ms (1021 modules)
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1382ms (1101 modules)
+ GET /tasks 500 in 3695ms
+ GET /tasks 500 in 368ms
+ ✓ Compiled in 2.3s (1117 modules)
+ GET /tasks 500 in 1861ms
+ GET /tasks 500 in 398ms
+ GET /tasks 200 in 1313ms
+ ✓ Compiled in 1322ms (1021 modules)
+ GET /tasks 200 in 1906ms
+ GET /tasks 200 in 2130ms
+ ✓ Compiled in 1574ms (1021 modules)
+ GET /tasks 200 in 1432ms
+ GET /tasks 200 in 2755ms
+ ✓ Compiled in 3.6s (1021 modules)
+ GET /tasks 200 in 4370ms
+ ✓ Compiled in 2.1s (1021 modules)
+ GET /tasks 200 in 3149ms
+ ✓ Compiled in 1310ms (1021 modules)
+ GET /tasks 200 in 1581ms
+ ○ Compiling /quality ...
+ ✓ Compiled /quality in 827ms (1029 modules)
+ ✓ Compiled in 438ms (470 modules)
+ GET /quality 200 in 1269ms
+ GET /quality 200 in 1208ms
+ GET /quality 200 in 2524ms
+ ✓ Compiled /agent in 377ms (561 modules)
+ GET /agent 200 in 509ms
+ GET /tasks 200 in 68ms
+ GET /quality 200 in 154ms
+ ✓ Compiled /brands in 416ms (563 modules)
+ GET /brands 200 in 651ms
+ ✓ Compiled /knowledge in 404ms (565 modules)
+ GET /knowledge 200 in 832ms
+ GET /knowledge 200 in 85ms
+ GET /brands 200 in 110ms
+ GET /knowledge 200 in 834ms
+ GET /knowledge 200 in 54ms
+ ○ Compiling /settings ...
+ ✓ Compiled /settings in 663ms (564 modules)
+ GET /settings 200 in 945ms
+ GET /settings 200 in 133ms
+ GET /brands 200 in 77ms
+ GET /knowledge 200 in 74ms
+ GET /agent 200 in 82ms
+ GET /tasks 200 in 72ms
+ ✓ Compiled /quality in 486ms (568 modules)
+ GET /quality 200 in 703ms
+ GET /tasks 200 in 581ms
+ GET /agent 200 in 48ms
+ GET /tasks 200 in 43ms
+ GET /agent 200 in 43ms
+ GET /brands 200 in 53ms
+ GET /knowledge 200 in 50ms
+ GET /quality 200 in 129ms
+ GET /tasks 200 in 51ms
+ GET /agent 200 in 42ms
+ GET /brands 200 in 44ms
+ GET /knowledge 200 in 38ms
+ GET /settings 200 in 65ms
+ GET /settings 200 in 51ms
+ GET /knowledge 200 in 48ms
+ GET /quality 200 in 288ms
+ GET /quality 200 in 2044ms

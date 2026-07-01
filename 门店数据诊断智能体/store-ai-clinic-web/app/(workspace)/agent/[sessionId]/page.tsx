@@ -6,5 +6,5 @@ export default async function AgentSessionPage({
   params: Promise<{ sessionId: string }>;
 }) {
   await params;
-  return <QualityShell view="detail" reportDetailVariant="screenshot" />;
+  return <QualityShell view="detail" liveFromStore />;
 }

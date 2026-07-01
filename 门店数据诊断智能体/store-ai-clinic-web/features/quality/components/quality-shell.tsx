@@ -18,12 +18,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { QualityDatasetScan, QualityIssueData, QualityMetric, QualityPipelineStage } from "@/features/quality/lib/dataset-scanner";
-
+import { BatchDetectionOverview } from "@/features/quality/components/batch-overview";
 import { ReportExportWorkspace } from "@/features/quality/components/report-export-workspace";
 import type { QualityExportTaskResponse } from "@/features/quality/lib/quality-export-types";
+import { useQualityScanStore } from "@/shared/store/quality-scan-store";
 
 export type QualityWorkspaceView = "batch" | "issues" | "detail" | "review" | "rules" | "export";
 type IssueListVariant = "default" | "screenshot";
@@ -77,11 +78,6 @@ export type QualityAssetRecord = {
   missingItems: string[];
 };
 
-const LazyBatchDetectionOverview = lazy(() =>
-  import("@/features/quality/components/batch-overview").then((module) => ({
-    default: module.BatchDetectionOverview,
-  })),
-);
 export type QualityAssetSummary = {
   datasetPath: string;
   scannedAt: string;
@@ -527,6 +523,7 @@ export function QualityShell({
   reviewVariant = "default",
   rulesVariant = "default",
   exportVariant = "default",
+  liveFromStore = false,
 }: {
   view?: QualityWorkspaceView;
   dataset?: QualityDatasetScan;
@@ -538,21 +535,48 @@ export function QualityShell({
   reviewVariant?: ReviewVariant;
   rulesVariant?: RulesVariant;
   exportVariant?: ExportVariant;
+  liveFromStore?: boolean;
 }) {
   const meta = viewMeta[view];
   const initialMetrics = dataset?.metrics?.length ? dataset.metrics : fallbackMetrics;
-  const [displayDatasetPath, setDisplayDatasetPath] = useState(dataset?.datasetPath?.replace(/\\/g, "/") ?? "D:/桌面/数据/5人");
+  const scanStoreTaskId = useQualityScanStore((state) => state.taskId);
+  const scanStoreDatasetPath = useQualityScanStore((state) => state.datasetPath);
+  const scanStoreSummary = useQualityScanStore((state) => state.importSummary);
+  const scanStoreIssues = useQualityScanStore((state) => state.issues);
+  const scanStorePipeline = useQualityScanStore((state) => state.pipeline);
+  const scanStoreMetrics = useQualityScanStore((state) => state.metrics);
+  const scanStoreAssetSummary = useQualityScanStore((state) => state.assetSummary);
+  const scanStoreScannedAt = useQualityScanStore((state) => state.scannedAt);
+  const setStoreImportSummary = useQualityScanStore((state) => state.setImportSummary);
+  const setStoreIssues = useQualityScanStore((state) => state.setIssues);
+  const setStorePipeline = useQualityScanStore((state) => state.setPipeline);
+  const setStoreMetrics = useQualityScanStore((state) => state.setMetrics);
+  const setStoreAssetSummary = useQualityScanStore((state) => state.setAssetSummary);
+  const setStoreScannedAt = useQualityScanStore((state) => state.setScannedAt);
+  const setStoreCleaning = useQualityScanStore((state) => state.setIsCleaning);
+  const setScanResult = useQualityScanStore((state) => state.setScanResult);
+  const initialStoreIssue =
+    liveFromStore && scanStoreIssues.length > 0
+      ? selectPrimaryImportedIssue(scanStoreIssues)
+      : ((dataset?.issues?.[0] as QualityIssue | undefined) ?? fallbackIssues[0]);
+  const [displayDatasetPath, setDisplayDatasetPath] = useState(
+    (liveFromStore ? scanStoreDatasetPath : dataset?.datasetPath)?.replace(/\\/g, "/") ?? "D:/桌面/数据/5人",
+  );
   const [reviewedStatuses, setReviewedStatuses] = useState<Record<string, ReviewStatus>>({});
-  const [importSummary, setImportSummary] = useState<QualityImportResponse | null>(null);
-  const [importedIssues, setImportedIssues] = useState<QualityIssue[] | null>(null);
+  const [importSummary, setImportSummary] = useState<QualityImportResponse | null>(() =>
+    liveFromStore ? mapStoredImportSummary(scanStoreSummary) : null,
+  );
+  const [importedIssues, setImportedIssues] = useState<QualityIssue[] | null>(() =>
+    liveFromStore && scanStoreIssues.length > 0 ? scanStoreIssues : null,
+  );
   const [selectedFilter, setSelectedFilter] = useState<IssueCategory>("all");
   const [selectedSeverity, setSelectedSeverity] = useState<SeverityFilter>("all");
   const [selectedStatus, setSelectedStatus] = useState<StatusFilter>("all");
   const [openFilterMenu, setOpenFilterMenu] = useState<FilterMenuKey>(null);
   const [query, setQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedIssueId, setSelectedIssueId] = useState((dataset?.issues?.[0] ?? fallbackIssues[0])?.id ?? "");
-  const [activePreviewPage, setActivePreviewPage] = useState(() => pageNumberFromIssue((dataset?.issues?.[0] ?? fallbackIssues[0]) as QualityIssue));
+  const [selectedIssueId, setSelectedIssueId] = useState(initialStoreIssue?.id ?? "");
+  const [activePreviewPage, setActivePreviewPage] = useState(() => pageNumberFromIssue(initialStoreIssue));
   const [isPaused, setIsPaused] = useState(false);
   const [operationMessage, setOperationMessage] = useState("");
   const [reviewFeedback, setReviewFeedback] = useState("");
@@ -561,14 +585,38 @@ export function QualityShell({
   const [isImporting, setIsImporting] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [exportHistory, setExportHistory] = useState<QualityExportTaskResponse[]>([]);
-  const [scanPipeline, setScanPipeline] = useState<QualityPipelineStage[]>(dataset?.pipeline ?? []);
-  const [scanMetrics, setScanMetrics] = useState<QualityMetric[]>(initialMetrics);
-  const [scannedAtLive, setScannedAtLive] = useState<string | null>(null);
-  const shouldLoadExportHistory = view === "batch" || (view === "export" && exportVariant !== "screenshot");
+  const [scanPipeline, setScanPipeline] = useState<QualityPipelineStage[]>(() =>
+    liveFromStore && scanStorePipeline.length > 0 ? scanStorePipeline : (dataset?.pipeline ?? []),
+  );
+  const [scanMetrics, setScanMetrics] = useState<QualityMetric[]>(() =>
+    liveFromStore && scanStoreMetrics.length > 0 ? scanStoreMetrics : initialMetrics,
+  );
+  const [liveAssetSummary, setLiveAssetSummary] = useState<QualityAssetSummary | null>(() =>
+    liveFromStore && scanStoreAssetSummary ? (scanStoreAssetSummary as QualityAssetSummary) : (assetSummary ?? null),
+  );
+  const [scannedAtLive, setScannedAtLive] = useState<string | null>(() => (liveFromStore ? scanStoreScannedAt : null));
 
   useEffect(() => {
-    if (!shouldLoadExportHistory) return;
+    if (!liveFromStore) return;
+    if (scanStoreSummary) setImportSummary(mapStoredImportSummary(scanStoreSummary));
+    if (scanStoreIssues.length > 0) setImportedIssues(scanStoreIssues);
+    if (scanStorePipeline.length > 0) setScanPipeline(scanStorePipeline);
+    if (scanStoreMetrics.length > 0) setScanMetrics(scanStoreMetrics);
+    if (scanStoreAssetSummary) setLiveAssetSummary(scanStoreAssetSummary as QualityAssetSummary);
+    if (scanStoreScannedAt) setScannedAtLive(scanStoreScannedAt);
+    if (scanStoreDatasetPath) setDisplayDatasetPath(scanStoreDatasetPath.replace(/\\/g, "/"));
+  }, [
+    liveFromStore,
+    scanStoreAssetSummary,
+    scanStoreDatasetPath,
+    scanStoreIssues,
+    scanStoreMetrics,
+    scanStorePipeline,
+    scanStoreScannedAt,
+    scanStoreSummary,
+  ]);
 
+  useEffect(() => {
     let cancelled = false;
     async function loadHistory() {
       try {
@@ -577,35 +625,56 @@ export function QualityShell({
         const data = (await response.json()) as QualityExportTaskResponse[];
         if (!cancelled) setExportHistory(Array.isArray(data) ? data : []);
       } catch {
-        // Keep the main quality workflow usable when export history is unavailable.
+        // 历史记录读取失败时静默回退到空状态，不影响主要流程
       }
     }
     loadHistory();
     return () => {
       cancelled = true;
     };
-  }, [importSummary, shouldLoadExportHistory]);
+  }, [importSummary]);
 
   const baseIssues = (importedIssues ?? (dataset?.issues?.length ? dataset.issues : fallbackIssues)) as QualityIssue[];
   const issueSource = view === "review" && reviewVariant === "screenshot" ? screenshotIssueListIssues : issueListVariant === "screenshot" ? screenshotIssueListIssues : baseIssues;
-  const metrics = importedIssues
-    ? metricsFromIssues(scanMetrics.length ? scanMetrics : initialMetrics, importedIssues)
-    : scanMetrics.length
-      ? scanMetrics
-      : initialMetrics;
+  const effectiveAssetSummary =
+    liveAssetSummary ??
+    assetSummary ??
+    buildDerivedAssetSummary(importSummary, importedIssues ?? [], scanMetrics.length ? scanMetrics : initialMetrics, scannedAtLive);
+  const metrics = buildMetricsFromScan(
+    scanMetrics.length ? scanMetrics : initialMetrics,
+    importedIssues ?? [],
+    importSummary,
+    effectiveAssetSummary ?? undefined,
+  );
   const scannedAt = scannedAtLive
     ? formatScannedAt(scannedAtLive)
     : dataset?.scannedAt
       ? formatScannedAt(dataset.scannedAt)
       : "2025-05-22 14:35:22";
-  const activeDatasetPath = importSummary?.dataset_path ?? displayDatasetPath;
+  const activeDatasetPath = importSummary?.dataset_path ?? effectiveAssetSummary?.datasetPath ?? displayDatasetPath;
   const ruleSet = rules?.rules?.length ? rules : { datasetPath: displayDatasetPath, sourceDocument: null, rules: prototypeRules };
-  const summary = exportSummary ?? fallbackExportSummary;
 
   const allIssues = useMemo(
     () => issueSource.map((issue) => ({ ...issue, status: reviewedStatuses[issue.id] ?? issue.status })),
     [issueSource, reviewedStatuses],
   );
+  const summary = useMemo(() => {
+    const shouldUseLiveSummary =
+      liveFromStore &&
+      activeDatasetPath &&
+      (!exportSummary?.datasetPath || normalizeDatasetPath(exportSummary.datasetPath) !== normalizeDatasetPath(activeDatasetPath));
+
+    if (shouldUseLiveSummary) {
+      return buildExportSummaryFromIssues({
+        datasetPath: activeDatasetPath,
+        issues: allIssues,
+        importSummary,
+        scannedAt: scannedAtLive ?? dataset?.scannedAt ?? null,
+      });
+    }
+
+    return exportSummary ?? fallbackExportSummary;
+  }, [activeDatasetPath, allIssues, dataset?.scannedAt, exportSummary, importSummary, liveFromStore, scannedAtLive]);
 
   const filteredIssues = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -660,6 +729,16 @@ export function QualityShell({
       return message;
     }
   }
+
+  useEffect(() => {
+    if (!allIssues.length) return;
+    if (allIssues.some((issue) => issue.id === selectedIssueId)) return;
+    const primary = selectPrimaryImportedIssue(allIssues);
+    if (!primary) return;
+    setSelectedIssueId(primary.id);
+    setActivePreviewPage(pageNumberFromIssue(primary));
+  }, [allIssues, selectedIssueId]);
+
   function handleSelectIssue(issueId: string) {
     const nextIssue = allIssues.find((issue) => issue.id === issueId) ?? filteredIssues.find((issue) => issue.id === issueId);
     setSelectedIssueId(issueId);
@@ -707,8 +786,20 @@ export function QualityShell({
     try {
       const response = await fetch("/api/quality/import", { method: "POST", body: formData });
       const data = (await response.json()) as QualityImportResponse;
+      const queuedPipeline = createQueuedPipeline(data.files);
+      const nextAssetSummary = buildDerivedAssetSummary(data, [], initialMetrics, null);
       setImportSummary(data);
       setImportedIssues(null);
+      setScanPipeline(queuedPipeline);
+      setScannedAtLive(null);
+      setLiveAssetSummary(nextAssetSummary ?? null);
+      setDisplayDatasetPath(data.dataset_path.replace(/\\/g, "/"));
+      setStoreImportSummary(toStoredImportSummary(data));
+      setStoreIssues([]);
+      setStorePipeline(queuedPipeline);
+      setStoreMetrics(buildMetricsFromScan(initialMetrics, [], data, nextAssetSummary ?? undefined));
+      setStoreAssetSummary(nextAssetSummary ?? null);
+      setStoreScannedAt(null);
       setOperationMessage("文件导入完成。");
     } catch {
       setOperationMessage("导入文件失败：请检查后端服务或稍后重试。");
@@ -719,27 +810,71 @@ export function QualityShell({
 
   async function handleStartCleaning() {
     if (!importSummary) return;
+    if (liveFromStore && scanStoreTaskId === importSummary.task_id && scanStoreIssues.length > 0) {
+      setImportedIssues(scanStoreIssues);
+      if (scanStorePipeline.length > 0) setScanPipeline(scanStorePipeline);
+      if (scanStoreMetrics.length > 0) setScanMetrics(scanStoreMetrics);
+      if (scanStoreAssetSummary) setLiveAssetSummary(scanStoreAssetSummary as QualityAssetSummary);
+      if (scanStoreScannedAt) setScannedAtLive(scanStoreScannedAt);
+      const primary = selectPrimaryImportedIssue(scanStoreIssues);
+      if (primary) {
+        setSelectedIssueId(primary.id);
+        setActivePreviewPage(pageNumberFromIssue(primary));
+      }
+      setOperationMessage(`已加载上次清洗结果：${importSummary.total_files} 个文件，发现 ${scanStoreIssues.length} 个疑似问题。`);
+      return;
+    }
+    const runningPipeline = createRunningPipeline(importSummary.files);
     setIsCleaning(true);
+    setStoreCleaning(true);
+    setScanPipeline(runningPipeline);
+    setStorePipeline(runningPipeline);
     setOperationMessage(`数据清洗任务已创建：${importSummary.total_files} 个文件进入目录扫描、PDF/OCR 和 Excel 字段证据流程。`);
     try {
       const response = await fetch(`/api/quality/import/${importSummary.task_id}/scan`, { method: "POST" });
       const data = (await response.json()) as QualityScanResponse;
       const nextIssues = (data.scan?.issues ?? []).map((issue) => mapBackendIssue(issue, importSummary.task_id));
+      const nextScannedAt = data.scan?.scanned_at ?? new Date().toISOString();
+      const nextAssetSummary = buildDerivedAssetSummary(
+        importSummary,
+        nextIssues,
+        data.scan?.metrics ?? scanMetrics,
+        nextScannedAt,
+      );
+      const nextPipeline = createCompletedPipeline(importSummary.files, nextIssues);
+      const nextMetrics = buildMetricsFromScan(
+        data.scan?.metrics?.length ? data.scan.metrics : scanMetrics,
+        nextIssues,
+        importSummary,
+        nextAssetSummary ?? undefined,
+      );
       setImportedIssues(nextIssues);
-      if (data.scan?.pipeline?.length) setScanPipeline(data.scan.pipeline);
-      if (data.scan?.metrics?.length) setScanMetrics(data.scan.metrics);
-      if (data.scan?.scanned_at) setScannedAtLive(data.scan.scanned_at);
+      setScanPipeline(nextPipeline);
+      setScanMetrics(nextMetrics);
+      setScannedAtLive(nextScannedAt);
+      setLiveAssetSummary(nextAssetSummary ?? null);
       const primary = selectPrimaryImportedIssue(nextIssues);
       if (primary) {
         setSelectedIssueId(primary.id);
         setActivePreviewPage(pageNumberFromIssue(primary));
         setIsEvidenceOpen(true);
       }
+      setScanResult({
+        taskId: importSummary.task_id,
+        datasetPath: importSummary.dataset_path,
+        importSummary: toStoredImportSummary(importSummary),
+        issues: nextIssues,
+        metrics: nextMetrics,
+        pipeline: nextPipeline,
+        assetSummary: nextAssetSummary ?? null,
+        scannedAt: nextScannedAt,
+      });
       setOperationMessage(`数据清洗任务已完成：${importSummary.total_files} 个文件完成目录扫描，发现 ${nextIssues.length} 个疑似问题。`);
     } catch {
       setOperationMessage("数据清洗失败：请检查后端服务或稍后重试。");
     } finally {
       setIsCleaning(false);
+      setStoreCleaning(false);
     }
   }
 
@@ -812,7 +947,6 @@ export function QualityShell({
         exportSummary={summary}
         disputedCount={allIssues.filter((issue) => issue.status === "disputed").length}
         initialExportHistory={exportHistory}
-        loadExportHistory={shouldLoadExportHistory}
       />
     );
   }
@@ -857,15 +991,15 @@ export function QualityShell({
           ) : null}
           {view === "batch" ? <DetectionFlow pipeline={scanPipeline} isCleaning={isCleaning} /> : null}
           {view === "batch" ? <MetricGrid metrics={metrics} /> : null}
-          {view === "batch" && assetSummary ? <AssetInventoryPanel assetSummary={assetSummary} /> : null}
+          {view === "batch" && effectiveAssetSummary ? <AssetInventoryPanel assetSummary={effectiveAssetSummary} /> : null}
           {view === "batch" ? (
-            <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">可视化总览加载中...</div>}>
-              <LazyBatchDetectionOverview
-                issues={importedIssues ?? baseIssues}
-                assetSummary={assetSummary ?? null}
-                exportHistory={exportHistory}
-              />
-            </Suspense>
+            <BatchDetectionOverview
+              metrics={metrics}
+              issues={importedIssues ?? baseIssues}
+              assetSummary={effectiveAssetSummary ?? null}
+              importSummary={importSummary}
+              exportHistory={exportHistory}
+            />
           ) : null}
 
           {view === "detail" && selectedIssue ? (
@@ -1440,7 +1574,7 @@ function IssuePanel({ title, subtitle, issues, allIssues, totalIssues, selectedI
           <button type="button" disabled={currentPage === 1} onClick={() => onSelectPage(Math.max(1, currentPage - 1))} className="rounded-md border border-[#d9e0e8] px-3 py-1.5 disabled:opacity-50">‹</button>
           {Array.from({ length: totalPages }, (_, index) => index + 1).slice(0, 4).map((page) => <button key={page} type="button" onClick={() => onSelectPage(page)} className={page === currentPage ? "rounded-md bg-[#0b9a9a] px-3 py-1.5 text-white" : "rounded-md border border-[#d9e0e8] px-3 py-1.5 text-[#344054]"}>{page}</button>)}
           <button type="button" disabled={currentPage === totalPages} onClick={() => onSelectPage(Math.min(totalPages, currentPage + 1))} className="rounded-md border border-[#d9e0e8] px-3 py-1.5 disabled:opacity-50">›</button>
-          <span className="rounded-md border border-[#d9e0e8] bg-white px-3 py-1.5">10 条/页</span>
+          <span className="rounded-md border border-[#d9e0e8] bg-white px-3 py-1.5">{ISSUE_PAGE_SIZE} 条/页</span>
         </div>
       </div>
     </section>
@@ -2147,13 +2281,272 @@ function metricValue(metrics: QualityMetric[], label: string) {
   return metrics.find((metric) => metric.label === label)?.value;
 }
 
-function metricsFromIssues(baseMetrics: QualityMetric[], issues: QualityIssue[]) {
+function normalizeDatasetPath(value: string) {
+  return value.replace(/\\/g, "/").trim();
+}
+
+function mapStoredImportSummary(
+  summary:
+    | {
+        taskId: string;
+        datasetPath: string;
+        totalBytes: number;
+        totalFiles: number;
+        files: Array<{ name: string; size: number; type?: string }>;
+      }
+    | null
+    | undefined,
+): QualityImportResponse | null {
+  if (!summary) return null;
+  return {
+    task_id: summary.taskId,
+    dataset_path: summary.datasetPath,
+    total_bytes: summary.totalBytes,
+    total_files: summary.totalFiles,
+    files: summary.files.map((file) => ({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    })),
+  };
+}
+
+function toStoredImportSummary(summary: QualityImportResponse) {
+  return {
+    taskId: summary.task_id,
+    datasetPath: summary.dataset_path,
+    totalBytes: summary.total_bytes,
+    totalFiles: summary.total_files,
+    files: summary.files.map((file) => ({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    })),
+  };
+}
+
+function importedFileCounters(files: ImportedQualityFile[]) {
+  let pdf = 0;
+  let excel = 0;
+  let image = 0;
+  files.forEach((file) => {
+    const normalizedName = file.name.toLowerCase();
+    if (normalizedName.endsWith(".pdf")) {
+      pdf += 1;
+      return;
+    }
+    if (/\.(xlsx|xls|csv)$/i.test(normalizedName)) {
+      excel += 1;
+      return;
+    }
+    if (isImageFile(normalizedName)) {
+      image += 1;
+    }
+  });
+  return { pdf, excel, image, total: files.length };
+}
+
+function inferArchiveIdFromFileName(fileName: string) {
+  const stem = fileName.replace(/\.[^.]+$/, "");
+  const match = stem.match(/([A-Za-z0-9]{6,})/);
+  return match?.[1] ?? stem;
+}
+
+function buildDerivedAssetSummary(
+  importSummary: QualityImportResponse | null,
+  issues: QualityIssue[],
+  metrics: QualityMetric[],
+  scannedAt: string | null,
+): QualityAssetSummary | null {
+  if (!importSummary) return null;
+
+  const issueByFile = new Map(issues.map((issue) => [issue.fileName, issue]));
+  const grouped = new Map<
+    string,
+    {
+      group: string;
+      archiveId: string;
+      pdfFiles: string[];
+      excelFiles: string[];
+    }
+  >();
+
+  importSummary.files.forEach((file) => {
+    const issue = issueByFile.get(file.name);
+    const archiveId = issue?.archiveId || inferArchiveIdFromFileName(file.name);
+    const group = issue?.group || "未分类";
+    const current = grouped.get(archiveId) ?? {
+      group,
+      archiveId,
+      pdfFiles: [],
+      excelFiles: [],
+    };
+    if (file.name.toLowerCase().endsWith(".pdf")) current.pdfFiles.push(file.name);
+    if (/\.(xlsx|xls|csv)$/i.test(file.name)) current.excelFiles.push(file.name);
+    grouped.set(archiveId, current);
+  });
+
+  const assets = Array.from(grouped.values()).map((asset) => ({
+    group: asset.group,
+    archiveId: asset.archiveId,
+    pdfFiles: asset.pdfFiles,
+    excelFiles: asset.excelFiles,
+    visitCount: Math.max(asset.pdfFiles.length, asset.excelFiles.length, 1),
+    hasPdf: asset.pdfFiles.length > 0,
+    hasExcel: asset.excelFiles.length > 0,
+    meetsThreeVisits: Math.max(asset.pdfFiles.length, asset.excelFiles.length, 1) >= 3,
+    missingItems: [
+      ...(asset.pdfFiles.length === 0 ? ["PDF"] : []),
+      ...(asset.excelFiles.length === 0 ? ["Excel"] : []),
+    ],
+  }));
+
+  const fileCounts = importedFileCounters(importSummary.files);
+  const groups = new Set(assets.map((asset) => asset.group).filter((group) => group && group !== "未分类"));
+  const metricAgeGroupCount = Number.parseInt(metricValue(metrics, "年龄段") ?? "", 10);
+  return {
+    datasetPath: importSummary.dataset_path,
+    scannedAt: scannedAt ?? new Date().toISOString(),
+    totalGroups: Number.isFinite(metricAgeGroupCount) && metricAgeGroupCount > 0 ? metricAgeGroupCount : groups.size,
+    totalArchives: assets.length,
+    totalPdfFiles: fileCounts.pdf,
+    totalExcelFiles: fileCounts.excel,
+    matchedArchives: assets.filter((asset) => asset.hasPdf && asset.hasExcel).length,
+    missingPdfArchives: assets.filter((asset) => !asset.hasPdf).length,
+    missingExcelArchives: assets.filter((asset) => !asset.hasExcel).length,
+    underThreeVisitArchives: assets.filter((asset) => !asset.meetsThreeVisits).length,
+    assets,
+  };
+}
+
+function buildExportSummaryFromIssues({
+  datasetPath,
+  issues,
+  importSummary,
+  scannedAt,
+}: {
+  datasetPath: string;
+  issues: QualityIssue[];
+  importSummary: QualityImportResponse | null;
+  scannedAt?: string | null;
+}): QualityExportSummary {
+  const confirmedIssues = issues.filter((issue) => issue.status === "confirmed").length;
+  const rejectedIssues = issues.filter((issue) => issue.status === "rejected").length;
+  const pendingIssues = issues.filter((issue) => issue.status === "needs_review" || issue.status === "ai_reviewing").length;
+  const disputedIssues = issues.filter((issue) => issue.status === "disputed").length;
+  const fileCount = importSummary?.total_files || new Set(issues.map((issue) => issue.fileName)).size;
+  const evidenceImageCount = issues.filter((issue) => issue.previewImageUrl || issue.previewImageUrls?.length).length || issues.length;
+  const ruleHits = Array.from(
+    issues.reduce((map, issue) => {
+      const current = map.get(issue.ruleId) ?? { ruleId: issue.ruleId, ruleName: issue.issueType, hitCount: 0 };
+      current.hitCount += 1;
+      map.set(issue.ruleId, current);
+      return map;
+    }, new Map<string, QualityExportRuleHit>()),
+  ).map(([, value]) => value);
+
+  return {
+    datasetPath,
+    generatedAt: scannedAt ?? new Date().toISOString(),
+    totalIssues: issues.length,
+    confirmedIssues,
+    rejectedIssues,
+    pendingIssues,
+    reviewRecordCount: confirmedIssues + rejectedIssues + disputedIssues,
+    evidenceImageCount,
+    sections: [
+      {
+        key: "current-scan-report",
+        title: "本次检测报告",
+        itemCount: Math.max(1, fileCount),
+        description: `当前上传批次共 ${fileCount} 个文件，识别出 ${issues.length} 个问题。`,
+      },
+      {
+        key: "non-compliant",
+        title: "不合规问题清单",
+        itemCount: confirmedIssues,
+        description: "人工已确认的问题，适合进入不合规清单。",
+      },
+      {
+        key: "possible-compliant",
+        title: "可能合规清单",
+        itemCount: rejectedIssues,
+        description: "人工已驳回的问题，保留为可能合规样本。",
+      },
+      {
+        key: "review-records",
+        title: "人工复核记录",
+        itemCount: confirmedIssues + rejectedIssues + disputedIssues,
+        description: "确认、驳回、争议和备注记录。",
+      },
+      {
+        key: "evidence-image-index",
+        title: "证据截图索引",
+        itemCount: evidenceImageCount,
+        description: "当前批次问题证据截图与页面索引。",
+      },
+    ],
+    ruleHits,
+  };
+}
+
+function buildMetricsFromScan(
+  baseMetrics: QualityMetric[],
+  issues: QualityIssue[],
+  importSummary?: QualityImportResponse | null,
+  assetSummary?: QualityAssetSummary,
+) {
   const metricMap = new Map(baseMetrics.map((metric) => [metric.label, { ...metric }]));
+  const fileCounts = importedFileCounters(importSummary?.files ?? []);
   const issueCount = String(issues.length);
   const reviewCount = String(issues.filter((issue) => issue.status === "needs_review").length);
+  const derivedAgeGroupCount = new Set(issues.map((issue) => issue.group).filter(Boolean)).size;
+  const fallbackAgeGroupCount = Number.parseInt(metricValue(baseMetrics, "年龄段") ?? "", 10) || 0;
+  const fallbackPdfCount = Number.parseInt(metricValue(baseMetrics, "PDF") ?? "", 10) || 0;
+  const fallbackExcelCount = Number.parseInt(metricValue(baseMetrics, "Excel") ?? "", 10) || 0;
+  const ageGroupCount = assetSummary?.totalGroups ?? (derivedAgeGroupCount || fallbackAgeGroupCount);
+  const pdfCount = assetSummary?.totalPdfFiles ?? (fileCounts.pdf || fallbackPdfCount);
+  const excelCount = assetSummary?.totalExcelFiles ?? (fileCounts.excel || fallbackExcelCount);
+  metricMap.set("年龄段", { label: "年龄段", value: String(ageGroupCount), icon: "people", color: "teal" });
+  metricMap.set("PDF", { label: "PDF", value: String(pdfCount), icon: "pdf", color: "blue" });
+  metricMap.set("Excel", { label: "Excel", value: String(excelCount), icon: "excel", color: "green" });
   metricMap.set("问题", { label: "问题", value: issueCount, icon: "warning", color: "orange" });
   metricMap.set("待复核", { label: "待复核", value: reviewCount, icon: "review", color: "red" });
   return ["年龄段", "PDF", "Excel", "问题", "待复核"].map((label) => metricMap.get(label)).filter(Boolean) as QualityMetric[];
+}
+
+function createQueuedPipeline(files: ImportedQualityFile[]) {
+  const counts = importedFileCounters(files);
+  return [
+    { label: "文件扫描", value: `${counts.total}/${counts.total}`, done: false, active: false },
+    { label: "Excel 解析", value: counts.excel > 0 ? `0/${counts.excel}` : "无 Excel", done: counts.excel === 0, active: false },
+    { label: "PDF 页数", value: counts.pdf > 0 ? `0/${counts.pdf}` : "无 PDF", done: counts.pdf === 0, active: false },
+    { label: "OCR 证据", value: counts.pdf + counts.image > 0 ? "待开始" : "无图像证据", done: counts.pdf + counts.image === 0, active: false },
+    { label: "人工复核", value: "待开始", done: false, active: false },
+  ] satisfies QualityPipelineStage[];
+}
+
+function createRunningPipeline(files: ImportedQualityFile[]) {
+  const counts = importedFileCounters(files);
+  return [
+    { label: "文件扫描", value: `${counts.total}/${counts.total}`, done: true, active: false },
+    { label: "Excel 解析", value: counts.excel > 0 ? `${counts.excel}/${counts.excel}` : "无 Excel", done: true, active: false },
+    { label: "PDF 页数", value: counts.pdf > 0 ? `${counts.pdf}/${counts.pdf}` : "无 PDF", done: true, active: false },
+    { label: "OCR 证据", value: counts.pdf + counts.image > 0 ? "生成中" : "无图像证据", done: false, active: counts.pdf + counts.image > 0 },
+    { label: "人工复核", value: "待开始", done: false, active: false },
+  ] satisfies QualityPipelineStage[];
+}
+
+function createCompletedPipeline(files: ImportedQualityFile[], issues: QualityIssue[]) {
+  const counts = importedFileCounters(files);
+  const reviewCount = issues.filter((issue) => issue.status === "needs_review").length;
+  return [
+    { label: "文件扫描", value: `${counts.total}/${counts.total}`, done: true, active: false },
+    { label: "Excel 解析", value: counts.excel > 0 ? `${counts.excel}/${counts.excel}` : "无 Excel", done: true, active: false },
+    { label: "PDF 页数", value: counts.pdf > 0 ? `${counts.pdf}/${counts.pdf}` : "无 PDF", done: true, active: false },
+    { label: "OCR 证据", value: issues.length > 0 ? `生成 ${issues.length} 条线索` : "无异常线索", done: true, active: false },
+    { label: "人工复核", value: reviewCount > 0 ? `${reviewCount} 条待复核` : "无待复核", done: reviewCount === 0, active: reviewCount > 0 },
+  ] satisfies QualityPipelineStage[];
 }
 
 function selectPrimaryImportedIssue(issues: QualityIssue[]) {

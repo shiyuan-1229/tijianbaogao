@@ -80,7 +80,7 @@ describe("quality workspace interactions", () => {
     expect(screen.getByLabelText("质检指标")).toBeInTheDocument();
     expect(screen.queryByText("高优先级问题")).not.toBeInTheDocument();
   });
-  it("renders the real asset inventory summary in batch view", async () => {
+  it("renders the real asset inventory summary in batch view", () => {
     render(
       <QualityShell
         view="batch"
@@ -101,10 +101,12 @@ describe("quality workspace interactions", () => {
       />,
     );
 
-    expect(screen.getByText("可视化总览加载中...")).toBeInTheDocument();
+    expect(screen.getByText("总文件数")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("检测总览")).getByText("31")).toBeInTheDocument();
+    expect(screen.getByText("总档案数")).toBeInTheDocument();
     expect(within(screen.getByLabelText("数据资产盘点")).getByText(/共 12 份档案/)).toBeInTheDocument();
   });
-  it("shows detection flow after the import cleaning panel", async () => {
+  it("shows detection flow after the import cleaning panel", () => {
     render(
       <QualityShell
         view="batch"
@@ -122,10 +124,10 @@ describe("quality workspace interactions", () => {
 
     const importHeading = screen.getByRole("heading", { name: "导入体检报告数据" });
     const detectionFlow = screen.getByLabelText("检测流程");
-    const overviewPlaceholder = screen.getByText("可视化总览加载中...");
+    const overviewChart = screen.getByText("体检数据质量分布");
 
     expect(importHeading.compareDocumentPosition(detectionFlow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(detectionFlow.compareDocumentPosition(overviewPlaceholder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(detectionFlow.compareDocumentPosition(overviewChart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
   it("renders the screenshot workflow while keeping internal status chrome hidden", () => {
     render(
@@ -1122,7 +1124,6 @@ describe("quality workspace interactions", () => {
     expect(within(evidencePanel).queryByText("XX体检中心检验报告单")).not.toBeInTheDocument();
   });
 });
-
 
 
 

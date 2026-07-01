@@ -10,5 +10,5 @@ export default async function QualityPage() {
     loadDefaultQualityAssets(),
   ]);
 
-  return <QualityShell view="batch" dataset={dataset} rules={rules} assetSummary={assetSummary} />;
+  return <QualityShell view="batch" dataset={dataset} rules={rules} assetSummary={assetSummary} liveFromStore />;
 }

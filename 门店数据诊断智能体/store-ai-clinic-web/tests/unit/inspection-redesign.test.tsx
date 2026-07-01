@@ -21,8 +21,8 @@ describe("inspection workspace redesign", () => {
     render(await TasksPage());
 
     expect(screen.getByText("问题清单")).toBeInTheDocument();
-    expect(screen.getByText("全局分诊，按风险类型、规则和状态定位问题，不在这里做人工作结论。")).toBeInTheDocument();
-    expect(screen.getByText("分诊证据摘要")).toBeInTheDocument();
+    expect(screen.getByText("用于批量分诊和跳转详情")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前问题证据")).toBeInTheDocument();
   });
 
   it("renders the report detail route without the legacy conversation UI", async () => {

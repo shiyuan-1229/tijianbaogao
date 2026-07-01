@@ -82,7 +82,7 @@ export function ReportExportWorkspace({
     let cancelled = false;
     async function loadHistory() {
       try {
-        const response = await fetch("/api/quality/exports", { cache: "no-store" });
+        const response = await fetch(`/api/quality/exports?dataset_path=${encodeURIComponent(datasetPath)}`, { cache: "no-store" });
         if (!response.ok) return;
         const data = (await response.json()) as QualityExportTaskResponse[];
         if (!cancelled && Array.isArray(data)) setExportHistory(data);
@@ -94,7 +94,7 @@ export function ReportExportWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [loadExportHistory]);
+  }, [datasetPath, loadExportHistory]);
 
   const selectedCount = exportDeliverables.filter((item) => selectedItems[item]).length;
   const sectionByTitle = useMemo(
@@ -137,7 +137,7 @@ export function ReportExportWorkspace({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           export_type: "报告交付包",
-          dataset_path: exportSummary.datasetPath || datasetPath,
+          dataset_path: datasetPath,
           selected_sections: selectedSections,
         }),
       });
@@ -150,7 +150,7 @@ export function ReportExportWorkspace({
         const entry: QualityExportTaskResponse = {
           id: data.id,
           export_type: data.export_type ?? "报告交付包",
-          dataset_path: exportSummary.datasetPath || datasetPath,
+          dataset_path: datasetPath,
           status: data.status ?? "done",
           message: data.message,
           created_at: data.created_at ?? new Date().toISOString(),

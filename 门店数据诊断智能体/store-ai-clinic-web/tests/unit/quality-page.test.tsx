@@ -10,14 +10,14 @@ describe("quality page", () => {
     expect(screen.getByRole("heading", { name: "批量检测工作台" })).toBeInTheDocument();
     expect(screen.getByText("D:/桌面/数据/5人")).toBeInTheDocument();
 
-    // 导入区在页面最上方
     expect(screen.getByRole("heading", { name: "导入体检报告数据" })).toBeInTheDocument();
     expect(screen.getByLabelText("选择文件夹导入")).toBeInTheDocument();
     expect(screen.getByLabelText("选择待清洗文件")).toBeInTheDocument();
 
-    // 可视化总览拆成懒加载模块，批量页首屏先显示轻量占位。
-    expect(screen.getByText("可视化总览加载中...")).toBeInTheDocument();
-
+    expect(screen.getByText("体检数据质量分布")).toBeInTheDocument();
+    expect(screen.getByText("年龄段覆盖 vs 均衡目标")).toBeInTheDocument();
+    expect(screen.getByText("性别比例（目标 1:1）")).toBeInTheDocument();
+    expect(screen.getByText("报告页数分布")).toBeInTheDocument();
 
     expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
   });

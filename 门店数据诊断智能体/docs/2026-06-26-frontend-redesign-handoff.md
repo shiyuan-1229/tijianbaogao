@@ -1030,3 +1030,124 @@ npm run test -- tests/unit/static-snapshot-pages-performance.test.tsx tests/unit
 npm run build
 npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
+
+### 9.19 2026-07-01 批量检测页重设计、文件夹导入、可视化总览与项目清理交接
+
+#### 背景
+
+新接手者（项目克隆自队友）在完整阅读了 `agent.md`、所有交接文档、12 个 plan、8 个 spec 后，对项目做了以下改动。
+
+#### 已完成的项目治理
+
+1. **创建 `.gitignore`**：项目之前没有 `.gitignore`，导致 `node_modules`（546 MB）、`.next`（184 MB）、`__pycache__`、`.pytest-tmp`、`codex_pytest_tmp`、`data/quality/pdf-pages`（316 MB OCR 缓存）等全部计入仓库体积。清理后从 ~35860 个文件 / ~1.4 GB 降到 ~1592 个文件 / ~399 MB。
+2. **补装 `pypdf` 依赖**：队友代码中 `knowledge_ingestion.py` 使用了 `from pypdf import PdfReader`，但 `pyproject.toml` 和 `uv.lock` 未记录。已在 `pyproject.toml` 的 `dependencies` 中添加 `"pypdf>=5.0"`，并执行 `uv lock` 更新锁文件。
+3. **环境搭建完成**：`uv sync` 安装全部 Python 依赖，`npm install`（npmmirror 镜像）安装前端依赖，后端 FastAPI app 可加载（38 个路由），前端 `node_modules` 完整。
+
+#### 已完成的前端改动
+
+##### 改动 1：批量检测页（`/quality`）布局重设计
+
+用户反馈："页面太杂了，每一个页面展示的东西都太多太紧凑了"。
+
+按用户要求重新设计 batch 视图为三段式布局：
+
+```text
+顶部：大标题 + 数据集选择
+├── 【导入区】（ImportCleaningHeroPanel）
+│   - 大卡片样式，带图标和说明
+│   - 两个入口：导入文件夹 + 导入文件
+│   - 已上传文件列表（表格：文件名/大小/类型）
+│   - 大按钮：开始数据清洗
+├── 【可视化总览】（BatchDetectionOverview）
+│   - 4 张统计卡片：总文件数 / 总档案数 / 发现问题 / 高严重度·待复核
+│   - 3 个饼图（ECharts）：合规情况占比 / 男女比例 / 年龄段分布
+│   - 历史检测记录（最近 10 条，点击跳转 /tasks）
+└── 【检测流程】（DetectionFlow）
+    - 文件扫描 / Excel 解析 / PDF 转图 / AI 评审 / 人工复核
+```
+
+**移除的内容**（从 batch 视图移到 detail/issues 视图）：
+- MetricGrid（KPI 卡片）
+- AssetInventoryPanel（数据资产盘点）
+- CleaningResultPanel（清洗结果分组）
+- IssuePanel（问题列表）
+- 证据详情面板
+
+**新增文件**：
+- `store-ai-clinic-web/features/quality/components/batch-overview.tsx`：可视化总览组件（ECharts 饼图 + 统计卡片 + 历史记录）
+- `store-ai-clinic-web/features/quality/lib/quality-export-types.ts`：共享的导出任务类型定义
+
+**修改文件**：
+- `store-ai-clinic-web/features/quality/components/quality-shell.tsx`：
+  - 导入 `BatchDetectionOverview`、`FolderOpen`、`FileUp`、`FileCheck2`、`X` 图标
+  - 导入 `useEffect`（之前只有 `useMemo`、`useState`）
+  - 新增 `exportHistory` state + `useEffect` 自动 fetch `/api/quality/exports`
+  - 重排 batch 视图 JSX 顺序：导入区 → 可视化总览 → 检测流程
+  - 用 `ImportCleaningHeroPanel` 替换旧 `ImportCleaningPanel`
+- `store-ai-clinic-web/tests/unit/quality-page.test.tsx`：更新断言匹配新布局
+
+##### 改动 2：文件夹导入
+
+用户反馈："只能导入文件吗，我希望可以导入文件夹，自动识别里面的内容"。
+
+在 `ImportCleaningHeroPanel` 中新增"导入文件夹"入口，使用 `webkitdirectory` + `directory` 属性（非标准但浏览器广泛支持），递归读取目录下所有文件。
+
+```tsx
+<input
+  type="file"
+  multiple
+  webkitdirectory=""
+  directory=""
+  className="sr-only"
+  onChange={(event) => void onImportFiles(event.currentTarget.files)}
+/>
+```
+
+后端 `POST /api/quality/import` 接口无需改动——前端把文件夹里的文件作为 `FormData` 逐个上传，后端照常处理。
+
+##### 改动 3：ECharts 饼图接入
+
+使用项目已安装的 `echarts@5.5.1` 核心包（未安装 `echarts-for-react` 包装），直接用 `echarts/core` + `echarts/charts`（PieChart）+ `echarts/components`（Tooltip/Legend/Title）+ `echarts/renderers`（CanvasRenderer）手写 React 包装组件。
+
+**测试环境兼容**：jsdom 没有真实 canvas，ECharts 初始化和 dispose 会崩。用 `process.env.NODE_ENV === "test"` 检测测试环境，跳过 `echarts.init()` 和 `echarts.dispose()`。
+
+#### 当前测试状态
+
+```bash
+# 已通过的测试
+npx vitest run tests/unit/quality-page.test.tsx           # 1 passed
+npx vitest run tests/unit/inspection-redesign.test.tsx     # 3 passed
+
+# 未完成的测试修复（12 个失败）
+npx vitest run tests/unit/quality-shell-interactions.test.tsx  # 10 passed, 12 failed
+```
+
+**12 个失败的根因**：这些测试用 `view="batch"` 渲染，但断言的是旧 batch 视图里的元素（MetricGrid、AssetInventoryPanel、CleaningResultPanel、证据面板），这些已按用户要求从 batch 视图移除。
+
+**修复方向**（未完成，接手者继续）：
+1. 测旧 batch KPI/资产盘点的测试 → 更新断言为新元素（合规情况占比、总文件数等）
+2. 测证据面板/问题详情的测试 → 改成 `view="detail"` 或 `view="issues"`
+3. 测导入交互的测试 → 保留 `view="batch"`，删掉对已移除组件的断言
+
+#### 用户反馈记录
+
+用户（作为使用者）提出的核心意见：
+
+1. **页面太杂**："每一个页面展示的东西都太多太紧凑了"
+2. **批量检测页改版要求**：
+   - 导入文件/文件夹板块放最上面，做明显一点
+   - 不展示每个文件的问题和证据详情
+   - 展示处理进度 + 总体情况可视化（饼图等图形化）
+   - 最下面放历史检测记录
+3. **PDF 预览真实性怀疑**："页面预览更像是 AI 生成的假的"——确认右侧 PDF 页面预览确实是静态示例（`reportDetailVariant="screenshot"`），不接真实数据，这是已知空缺
+4. **可视化需求**：合规/不合规/待审核占比饼图、总文件数量、男女比例、年龄比例
+
+#### 接手者注意事项
+
+1. **先修复 12 个失败测试**：`quality-shell-interactions.test.tsx` 里的 12 个失败是当前唯一阻塞项
+2. **ECharts 在测试环境会崩**：已用 `process.env.NODE_ENV === "test"` 跳过，但如果新增图表组件要同样处理
+3. **`webkitdirectory` 是非标准属性**：TypeScript DOM 类型未收录，已用 `@ts-expect-error` 抑制
+4. **`pypdf` 已加入 `pyproject.toml`**：队友 clone 后 `uv sync` 即可，不会再缺包
+5. **`.gitignore` 已创建**：后续不会再把 `node_modules`、`.next`、缓存等提交到仓库
+6. **真实数据目录 `D:\桌面\数据` 在当前电脑不存在**：需要用户自己准备体检报告 PDF + Excel 样本
+7. **`.env` 里有真实 API 密钥**：用户明确要求保留不删，但不要在文档/日志/截图中暴露

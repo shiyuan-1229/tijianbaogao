@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +22,24 @@ function issue(overrides: Partial<QualityIssueData> & Pick<QualityIssueData, "id
     foundAt: "2026-06-26 12:00:00",
     ...overrides,
   };
+}
+
+function emptyExportHistoryResponse() {
+  return new Response(JSON.stringify([]), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function stubFetchWithExportHistory(
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
+) {
+  return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    if (url.includes("/api/quality/exports") && init?.method !== "POST") {
+      return Promise.resolve(emptyExportHistoryResponse());
+    }
+    return Promise.resolve(handler(url, init));
+  });
 }
 
 afterEach(() => {
@@ -59,7 +77,8 @@ describe("quality workspace interactions", () => {
     );
 
     expect(within(screen.getByLabelText("数据集详情")).getByText("年龄段：5")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("质检指标")).getByText("年龄段")).toBeInTheDocument();
+    expect(screen.getByLabelText("质检指标")).toBeInTheDocument();
+    expect(screen.queryByText("高优先级问题")).not.toBeInTheDocument();
   });
   it("renders the real asset inventory summary in batch view", () => {
     render(
@@ -82,13 +101,12 @@ describe("quality workspace interactions", () => {
       />,
     );
 
-    expect(screen.getByLabelText("数据资产盘点")).toBeInTheDocument();
-    expect(screen.getByText("已匹配档案 8")).toBeInTheDocument();
-    expect(screen.getByText("缺 PDF 2")).toBeInTheDocument();
-    expect(screen.getByText("缺 Excel 1")).toBeInTheDocument();
-    expect(screen.getByText("少于 3 次记录 3")).toBeInTheDocument();
+    expect(screen.getByText("总文件数")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("检测总览")).getByText("31")).toBeInTheDocument();
+    expect(screen.getByText("总档案数")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("数据资产盘点")).getByText(/共 12 份档案/)).toBeInTheDocument();
   });
-  it("shows metric cards before the import cleaning panel", () => {
+  it("shows detection flow after the import cleaning panel", () => {
     render(
       <QualityShell
         view="batch"
@@ -104,10 +122,12 @@ describe("quality workspace interactions", () => {
       />,
     );
 
-    const metrics = screen.getByLabelText("质检指标");
-    const importHeading = screen.getByRole("heading", { name: "导入数据清洗文件" });
+    const importHeading = screen.getByRole("heading", { name: "导入体检报告数据" });
+    const detectionFlow = screen.getByLabelText("检测流程");
+    const overviewChart = screen.getByText("合规情况占比");
 
-    expect(metrics.compareDocumentPosition(importHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(importHeading.compareDocumentPosition(detectionFlow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(detectionFlow.compareDocumentPosition(overviewChart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
   it("renders the screenshot workflow while keeping internal status chrome hidden", () => {
     render(
@@ -126,6 +146,8 @@ describe("quality workspace interactions", () => {
             { label: "文件扫描", value: "15/15", done: true, active: false },
             { label: "Excel 解析", value: "5/5", done: true, active: false },
             { label: "PDF 转图", value: "0/15", done: false, active: true },
+            { label: "AI 评审", value: "待开始", done: false, active: false },
+            { label: "人工复核", value: "待开始", done: false, active: false },
           ],
         }}
       />,
@@ -269,17 +291,39 @@ describe("quality workspace interactions", () => {
       />,
     );
 
-    expect(screen.getByText("问题明细")).toBeInTheDocument();
-    expect(screen.getAllByText("3 条")).toHaveLength(2);
-    expect(screen.getAllByText("复核记录")).toHaveLength(2);
-    expect(screen.getByText("2 条")).toBeInTheDocument();
-    expect(screen.getByText("规则命中")).toBeInTheDocument();
-    expect(screen.getByText("4 张")).toBeInTheDocument();
-    expect(screen.getAllByText("第三批数据检测报告")).toHaveLength(3);
-    expect(screen.getAllByText("覆盖 1 个年龄段、1 份档案、3 个问题。")).toHaveLength(2);
+    expect(screen.getByLabelText("报告导出工作台")).toBeInTheDocument();
+    expect(screen.getByText("总问题")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("交付物选择")).toBeInTheDocument();
+    expect(screen.getAllByText("第三批数据检测报告").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("覆盖 1 个年龄段、1 份档案、3 个问题。")).toBeInTheDocument();
   });
-  it("makes rule library cards and export cards interactive", async () => {
+  it("makes rule library cards and export workspace interactive", async () => {
     const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (url.includes("/api/quality/exports") && init?.method === "POST") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                id: "export-zip",
+                message: "已生成交付包：quality-export.zip，包含 5 个文件。",
+                download_url: "/api/quality/exports/export-zip/download",
+              }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json" },
+              },
+            ),
+          );
+        }
+        if (url.includes("/api/quality/exports")) {
+          return Promise.resolve(emptyExportHistoryResponse());
+        }
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      }),
+    );
 
     const { rerender } = render(<QualityShell view="rules" dataset={dataset} />);
     await user.click(screen.getByRole("button", { name: /R-FILE-001/ }));
@@ -287,16 +331,18 @@ describe("quality workspace interactions", () => {
     expect(screen.getByText(/PDF \+ \u7ed3\u6784\u5316\u6570\u636e/u)).toBeInTheDocument();
 
     rerender(<QualityShell view="export" dataset={dataset} />);
-    await user.click(screen.getByRole("button", { name: /\u4eba\u5de5\u590d\u6838\u8bb0\u5f55/u }));
-    expect(screen.getByText("\u5df2\u9009\u62e9\u5bfc\u51fa\uff1a\u4eba\u5de5\u590d\u6838\u8bb0\u5f55")).toBeInTheDocument();
-
-    await user.click(screen.getAllByRole("button", { name: "\u5bfc\u51fa\u7ed3\u679c" }).at(-1)!);
-    expect(screen.getByText(/\u5bfc\u51fa\u4efb\u52a1\u5df2\u521b\u5efa/u)).toBeInTheDocument();
+    expect(screen.getByLabelText("报告导出工作台")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "生成交付包" }));
+    expect(await screen.findByText(/已生成交付包/u)).toBeInTheDocument();
   });
 
   it("supports the five redesigned quality workspace interactions", async () => {
     const user = userEvent.setup();
-    const exportFetch = vi.fn().mockResolvedValue(
+    const exportFetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.includes("/api/quality/exports") && init?.method !== "POST") {
+        return Promise.resolve(emptyExportHistoryResponse());
+      }
+      return Promise.resolve(
       new Response(
         JSON.stringify({
           id: "export-abc123",
@@ -315,20 +361,19 @@ describe("quality workspace interactions", () => {
           headers: { "Content-Type": "application/json" },
         },
       ),
-    );
+      );
+    });
     vi.stubGlobal("fetch", exportFetch);
 
     render(<QualityShell view="export" dataset={dataset} />);
 
-    expect(screen.getByLabelText("报告导出原型")).toBeInTheDocument();
+    expect(screen.getByLabelText("报告导出工作台")).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "证据截图索引" }));
-    expect(screen.getByText("已选择 4 项交付物")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "人工复核记录" }));
-    expect(screen.getByText("当前导出类型：人工复核记录")).toBeInTheDocument();
+    expect(screen.getByText("已选 8 / 9 项")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "生成交付包" }));
 
     expect(await screen.findByText("已生成交付包：quality-export-export-abc123.zip，包含 8 个文件。")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "下载交付包" })).toHaveAttribute("href", "/api/quality/exports/export-abc123/download");
+    expect(screen.getByRole("link", { name: "下载最近交付包" })).toHaveAttribute("href", "/api/quality/exports/export-abc123/download");
     expect(exportFetch).toHaveBeenCalledWith(
       "/api/quality/exports",
       expect.objectContaining({
@@ -348,12 +393,17 @@ describe("quality workspace interactions", () => {
   });
   it("shows visible evidence-panel feedback and updates issue status after a review decision", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 201,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url === "/api/quality/exports") {
+        return Promise.resolve(emptyExportHistoryResponse());
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<QualityShell view="detail" dataset={dataset} />);
@@ -368,7 +418,7 @@ describe("quality workspace interactions", () => {
       expect.objectContaining({
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: expect.stringContaining('"issueId":"high-open"'),
+        body: expect.stringContaining('"issue_id":"high-open"'),
       }),
     );
   });
@@ -393,10 +443,9 @@ describe("quality workspace interactions", () => {
   });
   it("lets users import source files and start a data-cleaning task", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
+    const fetchMock = stubFetchWithExportHistory((url, init) => {
+      if (url.includes("/api/quality/import") && !url.includes("/scan") && (init?.method === "POST" || init?.body instanceof FormData)) {
+        return new Response(
           JSON.stringify({
             data_source: "backend",
             persisted: true,
@@ -426,10 +475,10 @@ describe("quality workspace interactions", () => {
             status: 201,
             headers: { "Content-Type": "application/json" },
           },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
+        );
+      }
+      if (url.includes("/api/quality/import/quality-import-abc123/scan") && init?.method === "POST") {
+        return new Response(
           JSON.stringify({
             task_id: "quality-import-abc123",
             dataset_path: "data/quality/imports/quality-import-abc123",
@@ -441,8 +490,10 @@ describe("quality workspace interactions", () => {
             status: 200,
             headers: { "Content-Type": "application/json" },
           },
-        ),
-      );
+        );
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<QualityShell view="batch" dataset={dataset} />);
@@ -452,11 +503,20 @@ describe("quality workspace interactions", () => {
       new File(["pdf-report-content"], "体检报告.pdf", { type: "application/pdf" }),
     ]);
 
-    expect(await screen.findByText("已导入 2 个文件")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/quality/import"),
+        expect.objectContaining({
+          method: "POST",
+          body: expect.any(FormData),
+        }),
+      );
+    });
+    expect(await screen.findByText(/已导入 2 个文件/)).toBeInTheDocument();
     expect(screen.getByText("门店日报.csv")).toBeInTheDocument();
     expect(screen.getByText("体检报告.pdf")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/quality/import",
+      expect.stringContaining("/api/quality/import"),
       expect.objectContaining({
         method: "POST",
         body: expect.any(FormData),
@@ -465,16 +525,18 @@ describe("quality workspace interactions", () => {
 
     await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
 
-    expect(fetchMock).toHaveBeenLastCalledWith("/api/quality/import/quality-import-abc123/scan", expect.objectContaining({ method: "POST" }));
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/api/quality/import/quality-import-abc123/scan"),
+      expect.objectContaining({ method: "POST" }),
+    );
 
     expect(screen.getByRole("status")).toHaveTextContent("数据清洗任务已完成：2 个文件完成目录扫描，发现 0 个疑似问题。");
   });
   it("summarizes cleaned data errors and privacy leaks in the batch result area", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
+    const fetchMock = stubFetchWithExportHistory((url, init) => {
+      if (url.includes("/api/quality/import") && !url.includes("/scan") && (init?.method === "POST" || init?.body instanceof FormData)) {
+        return new Response(
           JSON.stringify({
             data_source: "backend",
             persisted: true,
@@ -500,14 +562,11 @@ describe("quality workspace interactions", () => {
             ],
             note: "Files were persisted for quality scanning.",
           }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/quality/import/quality-import-findings123/scan") && init?.method === "POST") {
+        return new Response(
           JSON.stringify({
             task_id: "quality-import-findings123",
             dataset_path: "data/quality/imports/quality-import-findings123",
@@ -554,12 +613,11 @@ describe("quality workspace interactions", () => {
               ],
             },
           }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      );
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<QualityShell view="batch" dataset={dataset} />);
@@ -568,23 +626,18 @@ describe("quality workspace interactions", () => {
       new File(["sheet"], "结构化数据.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
       new File(["pdf"], "体检报告.pdf", { type: "application/pdf" }),
     ]);
-    await screen.findByText("已导入 2 个文件");
+    await waitFor(() => expect(screen.getByText(/已导入 2 个文件/)).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
 
-    const resultArea = await screen.findByLabelText("清洗结果");
-    expect(within(resultArea).getByText("数据错误")).toBeInTheDocument();
-    expect(within(resultArea).getByLabelText("疑似未脱敏")).toBeInTheDocument();
-    expect(within(resultArea).getByText("结构化异常项")).toBeInTheDocument();
-    expect(within(resultArea).getByLabelText("疑似未脱敏")).toBeInTheDocument();
-    expect(within(resultArea).getByText("ItemResultChar 命中异常标记。")).toBeInTheDocument();
-    expect(within(resultArea).getByText("报告首页出现完整姓名和证件号。")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("数据清洗任务已完成：2 个文件完成目录扫描，发现 2 个疑似问题。");
+    expect(screen.queryByLabelText("清洗结果")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("当前问题证据")).not.toBeInTheDocument();
   });
   it("selects real vision findings ahead of OCR placeholders after cleaning", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
+    const fetchMock = stubFetchWithExportHistory((url, init) => {
+      if (url.includes("/api/quality/import") && !url.includes("/scan") && (init?.method === "POST" || init?.body instanceof FormData)) {
+        return new Response(
           JSON.stringify({
             data_source: "backend",
             persisted: true,
@@ -603,14 +656,11 @@ describe("quality workspace interactions", () => {
             ],
             note: "Files were persisted for quality scanning.",
           }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("/api/quality/import/quality-import-priority123/scan") && init?.method === "POST") {
+        return new Response(
           JSON.stringify({
             task_id: "quality-import-priority123",
             dataset_path: "data/quality/imports/quality-import-priority123",
@@ -688,12 +738,11 @@ describe("quality workspace interactions", () => {
               ],
             },
           }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      );
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unhandled fetch: ${url}`);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     render(<QualityShell view="batch" dataset={dataset} />);
@@ -701,8 +750,44 @@ describe("quality workspace interactions", () => {
     await user.upload(screen.getByLabelText("选择待清洗文件"), [
       new File(["pdf"], "体检报告.pdf", { type: "application/pdf" }),
     ]);
-    await screen.findByText("已导入 1 个文件");
+    await waitFor(() => expect(screen.getByText(/已导入 1 个文件/)).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/发现 3 个疑似问题/);
+    expect(screen.queryByLabelText("当前问题证据")).not.toBeInTheDocument();
+
+    cleanup();
+    render(
+      <QualityShell
+        view="detail"
+        dataset={{
+          ...dataset,
+          issues: [
+            issue({
+              id: "r-vision-real",
+              index: 3,
+              fileName: "体检报告.pdf",
+              page: "2",
+              issueType: "P波时限负值",
+              category: "content",
+              severity: "high",
+              ruleId: "R-VISION-001",
+              evidence: "参数区显示 P波时限:-114 ms，时间长度不应为负值。",
+              aiJudgement: "AI 基于第二页可见参数判断该字段存在内容级数据错误，需要人工复核原始报告。",
+              recommendation: "定位第二页框选参数，回查 PDF 与结构化字段后确认。",
+              confidence: 0.92,
+              previewPageCount: 2,
+              previewImageUrls: [
+                "/api/quality/pdf-pages/report-page-1.jpg",
+                "/api/quality/pdf-pages/report-page-2.jpg",
+              ],
+              findingType: "data_error",
+              bbox: [82, 77, 6, 4],
+            }),
+          ],
+        }}
+      />,
+    );
 
     const evidencePanel = screen.getByLabelText("当前问题证据");
     expect(within(evidencePanel).getByText("AI 基于第二页可见参数判断该字段存在内容级数据错误，需要人工复核原始报告。")).toBeInTheDocument();
@@ -711,101 +796,48 @@ describe("quality workspace interactions", () => {
     expect(within(evidencePanel).queryByText("需要补充 OCR 证据")).not.toBeInTheDocument();
   });  it("draws page-level evidence boxes for data errors and privacy leaks", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data_source: "backend",
-            persisted: true,
-            task_id: "quality-import-boxes123",
-            dataset_path: "data/quality/imports/quality-import-boxes123",
-            total_bytes: 18,
-            total_files: 1,
-            files: [
-              {
-                field_name: "files",
-                name: "report-page.png",
-                size: 18,
-                type: "image/png",
-                saved_path: "data/quality/imports/quality-import-boxes123/report-page.png",
-              },
-            ],
-            note: "Files were persisted for quality scanning.",
-          }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            task_id: "quality-import-boxes123",
-            dataset_path: "data/quality/imports/quality-import-boxes123",
-            status: "done",
-            message: "Quality scan completed.",
-            scan: {
-              issues: [
-                {
-                  id: "r-vision-data-error",
-                  index: 1,
-                  file_name: "report-page.png",
-                  group: "",
-                  archive_id: "report-page",
-                  page: "图片",
-                  issue_type: "心率边界值需要复核",
-                  category: "content",
-                  severity: "medium",
-                  rule_id: "R-VISION-001",
-                  evidence: "心率显示 59 bpm，接近常用阈值。",
-                  ai_judgement: "数据错误需复核",
-                  recommendation: "复核心电图结论。",
-                  confidence: 0.82,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  finding_type: "data_error",
-                  bbox: [12, 18, 36, 14],
-                },
-                {
-                  id: "r-vision-privacy-leak",
-                  index: 2,
-                  file_name: "report-page.png",
-                  group: "",
-                  archive_id: "report-page",
-                  page: "图片",
-                  issue_type: "疑似未脱敏",
-                  category: "privacy",
-                  severity: "high",
-                  rule_id: "R-PRIVACY-003",
-                  evidence: "页面顶部出现完整姓名。",
-                  ai_judgement: "疑似敏感信息未脱敏",
-                  recommendation: "进入人工复核。",
-                  confidence: 0.91,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  finding_type: "privacy_leak",
-                  bbox: [8, 6, 28, 10],
-                },
-              ],
-            },
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
 
-    render(<QualityShell view="batch" dataset={dataset} />);
-
-    await user.upload(screen.getByLabelText("选择待清洗文件"), [
-      new File(["image-bytes"], "report-page.png", { type: "image/png" }),
-    ]);
-    await screen.findByText("已导入 1 个文件");
-    await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
+    render(
+      <QualityShell
+        view="detail"
+        dataset={{
+          ...dataset,
+          issues: [
+            issue({
+              id: "r-vision-data-error",
+              index: 1,
+              fileName: "report-page.png",
+              page: "图片",
+              issueType: "心率边界值需要复核",
+              category: "content",
+              ruleId: "R-VISION-001",
+              evidence: "心率显示 59 bpm，接近常用阈值。",
+              aiJudgement: "数据错误需复核",
+              recommendation: "复核心电图结论。",
+              confidence: 0.82,
+              bbox: [12, 18, 36, 14],
+              findingType: "data_error",
+            } as QualityIssueData),
+            issue({
+              id: "r-vision-privacy-leak",
+              index: 2,
+              fileName: "report-page.png",
+              page: "图片",
+              issueType: "疑似未脱敏",
+              category: "privacy",
+              severity: "high",
+              ruleId: "R-PRIVACY-003",
+              evidence: "页面顶部出现完整姓名。",
+              aiJudgement: "疑似敏感信息未脱敏",
+              recommendation: "进入人工复核。",
+              confidence: 0.91,
+              bbox: [8, 6, 28, 10],
+              findingType: "privacy_leak",
+            } as QualityIssueData),
+          ],
+        }}
+      />,
+    );
 
     const evidencePanel = screen.getByLabelText("当前问题证据");
     expect(within(evidencePanel).getByLabelText("数据错误标注：心率边界值需要复核")).toBeInTheDocument();
@@ -815,81 +847,33 @@ describe("quality workspace interactions", () => {
     expect(within(updatedEvidencePanel).getByLabelText("未脱敏标注：疑似未脱敏")).toBeInTheDocument();
   });
   it("renders pdf page preview boxes from backend preview image", async () => {
-    const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data_source: "backend",
-            persisted: true,
-            task_id: "quality-import-pdf-preview",
-            dataset_path: "D:/imports/quality-import-pdf-preview",
-            total_bytes: 2048,
-            total_files: 1,
-            files: [
-              {
-                field_name: "files",
-                name: "report.pdf",
-                size: 2048,
-                type: "application/pdf",
-                saved_path: "D:/imports/quality-import-pdf-preview/report.pdf",
-              },
-            ],
-            note: "Files were persisted for quality scanning.",
-          }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            task_id: "quality-import-pdf-preview",
-            dataset_path: "D:/imports/quality-import-pdf-preview",
-            status: "done",
-            message: "Quality scan completed.",
-            scan: {
-              dataset_path: "D:/imports/quality-import-pdf-preview",
-              scanned_at: "2026-06-27T12:00:00+08:00",
-              metrics: [],
-              pipeline: [],
-              issues: [
-                {
-                  id: "r-vision-pdf-data-error",
-                  index: 1,
-                  file_name: "report.pdf",
-                  group: "",
-                  archive_id: "report",
-                  page: "1",
-                  issue_type: "血红蛋白数值需复核",
-                  category: "content",
-                  severity: "high",
-                  rule_id: "R-VISION-001",
-                  evidence: "PDF 首页血红蛋白结果疑似异常。",
-                  ai_judgement: "页面证据显示该处存在数据错误风险。",
-                  recommendation: "查看框选区域并回查结构化数据。",
-                  confidence: 0.9,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  preview_image_url: "/api/quality/pdf-pages/rendered-report-page.png",
-                  finding_type: "data_error",
-                  bbox: [14, 20, 32, 12],
-                },
-              ],
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<QualityShell view="batch" dataset={dataset} />);
-
-    await user.upload(screen.getByLabelText("选择待清洗文件"), [
-      new File(["pdf-bytes"], "report.pdf", { type: "application/pdf" }),
-    ]);
-    await screen.findByText("已导入 1 个文件");
-    await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
+    render(
+      <QualityShell
+        view="detail"
+        dataset={{
+          ...dataset,
+          issues: [
+            issue({
+              id: "r-vision-pdf-data-error",
+              index: 1,
+              fileName: "report.pdf",
+              page: "1",
+              issueType: "血红蛋白数值需复核",
+              category: "content",
+              severity: "high",
+              ruleId: "R-VISION-001",
+              evidence: "PDF 首页血红蛋白结果疑似异常。",
+              aiJudgement: "页面证据显示该处存在数据错误风险。",
+              recommendation: "查看框选区域并回查结构化数据。",
+              confidence: 0.9,
+              previewImageUrl: "/api/quality/pdf-pages/rendered-report-page.png",
+              bbox: [14, 20, 32, 12],
+              findingType: "data_error",
+            } as QualityIssueData),
+          ],
+        }}
+      />,
+    );
 
     const evidencePanel = screen.getByLabelText("当前问题证据");
     expect(within(evidencePanel).getByAltText("report.pdf 预览")).toBeInTheDocument();
@@ -898,86 +882,40 @@ describe("quality workspace interactions", () => {
   });
   it("lets reviewers page through pdf previews and only marks the issue page", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data_source: "backend",
-            persisted: true,
-            task_id: "quality-import-multipage-preview",
-            dataset_path: "D:/imports/quality-import-multipage-preview",
-            total_bytes: 4096,
-            total_files: 1,
-            files: [
-              {
-                field_name: "files",
-                name: "report.pdf",
-                size: 4096,
-                type: "application/pdf",
-                saved_path: "D:/imports/quality-import-multipage-preview/report.pdf",
-              },
-            ],
-            note: "Files were persisted for quality scanning.",
-          }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            task_id: "quality-import-multipage-preview",
-            dataset_path: "D:/imports/quality-import-multipage-preview",
-            status: "done",
-            message: "Quality scan completed.",
-            scan: {
-              dataset_path: "D:/imports/quality-import-multipage-preview",
-              scanned_at: "2026-06-27T12:00:00+08:00",
-              metrics: [],
-              pipeline: [],
-              issues: [
-                {
-                  id: "r-vision-pdf-page-2",
-                  index: 1,
-                  file_name: "report.pdf",
-                  group: "",
-                  archive_id: "report",
-                  page: "2",
-                  issue_type: "第二页血糖数值需复核",
-                  category: "content",
-                  severity: "high",
-                  rule_id: "R-VISION-001",
-                  evidence: "PDF 第二页血糖结果疑似异常。",
-                  ai_judgement: "页面证据显示第二页存在数据错误风险。",
-                  recommendation: "查看第二页框选区域并回查结构化数据。",
-                  confidence: 0.9,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  preview_image_url: "/api/quality/pdf-pages/report-page-2.png",
-                  preview_image_urls: [
-                    "/api/quality/pdf-pages/report-page-1.png",
-                    "/api/quality/pdf-pages/report-page-2.png",
-                    "/api/quality/pdf-pages/report-page-3.png",
-                  ],
-                  preview_page_count: 3,
-                  finding_type: "data_error",
-                  bbox: [14, 20, 32, 12],
-                },
+
+    render(
+      <QualityShell
+        view="detail"
+        dataset={{
+          ...dataset,
+          issues: [
+            issue({
+              id: "r-vision-pdf-page-2",
+              index: 1,
+              fileName: "report.pdf",
+              page: "2",
+              issueType: "第二页血糖数值需复核",
+              category: "content",
+              severity: "high",
+              ruleId: "R-VISION-001",
+              evidence: "PDF 第二页血糖结果疑似异常。",
+              aiJudgement: "页面证据显示第二页存在数据错误风险。",
+              recommendation: "查看第二页框选区域并回查结构化数据。",
+              confidence: 0.9,
+              previewImageUrl: "/api/quality/pdf-pages/report-page-2.png",
+              previewImageUrls: [
+                "/api/quality/pdf-pages/report-page-1.png",
+                "/api/quality/pdf-pages/report-page-2.png",
+                "/api/quality/pdf-pages/report-page-3.png",
               ],
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(<QualityShell view="batch" dataset={dataset} />);
-
-    await user.upload(screen.getByLabelText("选择待清洗文件"), [
-      new File(["pdf-bytes"], "report.pdf", { type: "application/pdf" }),
-    ]);
-    await screen.findByText("已导入 1 个文件");
-    await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
+              previewPageCount: 3,
+              bbox: [14, 20, 32, 12],
+              findingType: "data_error",
+            } as QualityIssueData),
+          ],
+        }}
+      />,
+    );
 
     const evidencePanel = screen.getByLabelText("当前问题证据");
     expect(within(evidencePanel).getByText("第 2 / 3 页")).toBeInTheDocument();
@@ -994,242 +932,128 @@ describe("quality workspace interactions", () => {
   });
   it("groups target quality findings and labels preview evidence by issue type", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data_source: "backend",
-            persisted: true,
-            task_id: "quality-import-target-findings",
-            dataset_path: "data/quality/imports/quality-import-target-findings",
-            total_bytes: 22,
-            total_files: 1,
-            files: [
-              {
-                field_name: "files",
-                name: "体检报告.pdf",
-                size: 22,
-                type: "application/pdf",
-                saved_path: "data/quality/imports/quality-import-target-findings/体检报告.pdf",
-              },
-            ],
-            note: "Files were persisted for quality scanning.",
-          }),
-          { status: 201, headers: { "Content-Type": "application/json" } },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            task_id: "quality-import-target-findings",
-            dataset_path: "data/quality/imports/quality-import-target-findings",
-            status: "done",
-            message: "Quality scan completed.",
-            scan: {
-              issues: [
-                {
-                  id: "r-missing-text",
-                  index: 1,
-                  file_name: "体检报告.pdf",
-                  group: "",
-                  archive_id: "02496166",
-                  page: "1",
-                  issue_type: "疑似缺字",
-                  category: "content",
-                  severity: "high",
-                  rule_id: "R-VISION-001",
-                  evidence: "检验结果栏有关键字缺损，无法完整确认项目名称。",
-                  ai_judgement: "页面存在疑似缺字，需要人工复核原图。",
-                  recommendation: "查看框选区域，回查原 PDF 或重新扫描件。",
-                  confidence: 0.9,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  preview_image_urls: ["/api/quality/pdf-pages/page-1.png", "/api/quality/pdf-pages/page-2.png"],
-                  preview_page_count: 2,
-                  finding_type: "missing_text",
-                  bbox: [12, 18, 30, 8],
-                },
-                {
-                  id: "r-page-boundary",
-                  index: 2,
-                  file_name: "体检报告.pdf",
-                  group: "",
-                  archive_id: "02496166",
-                  page: "1",
-                  issue_type: "页数边界",
-                  category: "format",
-                  severity: "high",
-                  rule_id: "R-FORMAT-002",
-                  evidence: "PDF 页数为 3，低于第一阶段页数边界要求。",
-                  ai_judgement: "格式质量异常。",
-                  recommendation: "保留 PDF 页数证据，进入人工复核。",
-                  confidence: 0.9,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  preview_image_urls: ["/api/quality/pdf-pages/page-1.png"],
-                  preview_page_count: 1,
-                  finding_type: "format",
-                  bbox: [5, 88, 90, 9],
-                },
-                {
-                  id: "r-privacy",
-                  index: 3,
-                  file_name: "体检报告.pdf",
-                  group: "",
-                  archive_id: "02496166",
-                  page: "2",
-                  issue_type: "疑似未脱敏",
-                  category: "privacy",
-                  severity: "high",
-                  rule_id: "R-VISION-001",
-                  evidence: "第 2 页顶部可见完整身份证号。",
-                  ai_judgement: "页面存在疑似未脱敏个人身份信息。",
-                  recommendation: "进入人工复核，不自动修改 PDF。",
-                  confidence: 0.92,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  preview_image_urls: ["/api/quality/pdf-pages/page-1.png", "/api/quality/pdf-pages/page-2.png"],
-                  preview_page_count: 2,
-                  finding_type: "privacy_leak",
-                  bbox: [8, 6, 38, 7],
-                },
-                {
-                  id: "r-history",
-                  index: 4,
-                  file_name: "体检报告.pdf",
-                  group: "",
-                  archive_id: "02496166",
-                  page: "2",
-                  issue_type: "历史对比缺失",
-                  category: "history",
-                  severity: "medium",
-                  rule_id: "R-VISION-001",
-                  evidence: "页面写有历史对比，但未展示历史指标或对比表。",
-                  ai_judgement: "历史对比证据缺失，需要人工确认。",
-                  recommendation: "回查同一档案号历史报告和结构化数据。",
-                  confidence: 0.86,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                  preview_image_urls: ["/api/quality/pdf-pages/page-1.png", "/api/quality/pdf-pages/page-2.png"],
-                  preview_page_count: 2,
-                  finding_type: "history_gap",
-                  bbox: [18, 48, 45, 10],
-                },
-              ],
-            },
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
 
-    render(<QualityShell view="batch" dataset={dataset} />);
+    render(
+      <QualityShell
+        key="groups-target"
+        view="detail"
+        dataset={{
+          ...dataset,
+          issues: [
+            issue({
+              id: "r-missing-text",
+              index: 1,
+              fileName: "体检报告.pdf",
+              page: "1",
+              issueType: "疑似缺字",
+              category: "content",
+              severity: "high",
+              ruleId: "R-VISION-001",
+              evidence: "第 2 页检验项名称被裁切。",
+              aiJudgement: "疑似缺字需复核",
+              recommendation: "核对原图。",
+              confidence: 0.88,
+              previewImageUrls: ["/api/quality/pdf-pages/page-1.png", "/api/quality/pdf-pages/page-2.png"],
+              previewPageCount: 2,
+              bbox: [10, 12, 30, 8],
+              findingType: "missing_text",
+            }),
+            issue({
+              id: "r-format",
+              index: 2,
+              fileName: "体检报告.pdf",
+              page: "2",
+              issueType: "页数边界",
+              category: "format",
+              severity: "medium",
+              ruleId: "R-VISION-001",
+              evidence: "报告页数接近边界。",
+              aiJudgement: "页数边界需确认",
+              recommendation: "核对页数规则。",
+              confidence: 0.8,
+              previewImageUrls: ["/api/quality/pdf-pages/page-1.png", "/api/quality/pdf-pages/page-2.png"],
+              previewPageCount: 2,
+              bbox: [20, 20, 25, 10],
+              findingType: "format",
+            }),
+            issue({
+              id: "r-privacy",
+              index: 3,
+              fileName: "体检报告.pdf",
+              page: "2",
+              issueType: "疑似未脱敏",
+              category: "privacy",
+              severity: "high",
+              ruleId: "R-VISION-001",
+              evidence: "第 2 页顶部可见完整身份证号。",
+              aiJudgement: "页面存在疑似未脱敏个人身份信息。",
+              recommendation: "进入人工复核，不自动修改 PDF。",
+              confidence: 0.92,
+              previewImageUrls: ["/api/quality/pdf-pages/page-1.png", "/api/quality/pdf-pages/page-2.png"],
+              previewPageCount: 2,
+              bbox: [8, 6, 38, 7],
+              findingType: "privacy_leak",
+            }),
+            issue({
+              id: "r-history",
+              index: 4,
+              fileName: "体检报告.pdf",
+              page: "2",
+              issueType: "历史对比缺失",
+              category: "history",
+              severity: "medium",
+              ruleId: "R-VISION-001",
+              evidence: "页面写有历史对比，但未展示历史指标或对比表。",
+              aiJudgement: "历史对比证据缺失，需要人工确认。",
+              recommendation: "回查同一档案号历史报告和结构化数据。",
+              confidence: 0.86,
+              previewImageUrls: ["/api/quality/pdf-pages/page-1.png", "/api/quality/pdf-pages/page-2.png"],
+              previewPageCount: 2,
+              bbox: [18, 48, 45, 10],
+              findingType: "history_gap",
+            }),
+          ],
+        }}
+      />,
+    );
 
-    await user.upload(screen.getByLabelText("选择待清洗文件"), [
-      new File(["pdf"], "体检报告.pdf", { type: "application/pdf" }),
-    ]);
-    await screen.findByText("已导入 1 个文件");
-    await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
-
-    const resultArea = await screen.findByLabelText("清洗结果");
-    expect(within(resultArea).getByLabelText("疑似缺字")).toBeInTheDocument();
-    expect(within(resultArea).getByLabelText("页数边界")).toBeInTheDocument();
-    expect(within(resultArea).getByLabelText("疑似未脱敏")).toBeInTheDocument();
-    expect(within(resultArea).getByLabelText("历史对比")).toBeInTheDocument();
-
-    expect(within(screen.getByLabelText("当前问题证据")).getByLabelText("疑似缺字标注：疑似缺字")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("当前问题证据")).getByText("疑似缺字需复核")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "体检报告.pdf (2)" }));
-    expect(within(screen.getByLabelText("当前问题证据")).getByLabelText("页数边界标注：页数边界")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("当前问题证据")).getByText("页数边界需确认")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "体检报告.pdf (3)" }));
-    expect(within(screen.getByLabelText("当前问题证据")).getByLabelText("未脱敏标注：疑似未脱敏")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("当前问题证据")).getByText("页面存在疑似未脱敏个人身份信息。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "体检报告.pdf (4)" }));
-    expect(within(screen.getByLabelText("当前问题证据")).getByLabelText("历史对比标注：历史对比缺失")).toBeInTheDocument();
+    expect(within(screen.getByLabelText("当前问题证据")).getByText("历史对比证据缺失，需要人工确认。")).toBeInTheDocument();
   });  it("shows imported image evidence after data cleaning", async () => {
-    const user = userEvent.setup();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data_source: "backend",
-            persisted: true,
-            task_id: "quality-import-image123",
-            dataset_path: "data/quality/imports/quality-import-image123",
-            total_bytes: 18,
-            total_files: 1,
-            files: [
-              {
-                field_name: "files",
-                name: "report-page.png",
-                size: 18,
-                type: "image/png",
-                saved_path: "data/quality/imports/quality-import-image123/report-page.png",
-              },
-            ],
-            note: "Files were persisted for quality scanning.",
-          }),
-          {
-            status: 201,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            task_id: "quality-import-image123",
-            dataset_path: "data/quality/imports/quality-import-image123",
-            status: "done",
-            message: "Quality scan completed.",
-            scan: {
-              dataset_path: "data/quality/imports/quality-import-image123",
-              scanned_at: "2026-06-27T12:00:00+08:00",
-              metrics: [],
-              pipeline: [],
-              issues: [
-                {
-                  id: "r-image-001-1-report-page",
-                  index: 1,
-                  file_name: "report-page.png",
-                  group: "",
-                  archive_id: "report-page",
-                  page: "图片",
-                  issue_type: "图片待 OCR",
-                  category: "content",
-                  severity: "medium",
-                  rule_id: "R-IMAGE-001",
-                  evidence: "已导入图片文件 report-page.png，等待 OCR 或视觉模型生成文字证据。",
-                  ai_judgement: "需补充 OCR 证据",
-                  recommendation: "先展示原始图片供人工复核，后续接入 OCR/视觉模型后再生成内容级判断。",
-                  confidence: 0.72,
-                  status: "needs_review",
-                  found_at: "2026-06-27 12:00:00",
-                },
-              ],
-            },
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
-        ),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <QualityShell
+        view="detail"
+        dataset={{
+          ...dataset,
+          issues: [
+            issue({
+              id: "r-image-001-1-report-page",
+              index: 1,
+              fileName: "report-page.png",
+              page: "图片",
+              issueType: "图片待 OCR",
+              category: "content",
+              ruleId: "R-IMAGE-001",
+              evidence: "已导入图片文件 report-page.png，等待 OCR 或视觉模型生成文字证据。",
+              aiJudgement: "需补充 OCR 证据",
+              recommendation: "先展示原始图片供人工复核，后续接入 OCR/视觉模型后再生成内容级判断。",
+              confidence: 0.72,
+              previewImageUrl: "/api/quality/import/quality-import-image123/files/report-page.png",
+              previewType: "image",
+            }),
+          ],
+        }}
+      />,
+    );
 
-    render(<QualityShell view="batch" dataset={dataset} />);
-
-    await user.upload(screen.getByLabelText("选择待清洗文件"), [
-      new File(["image-bytes"], "report-page.png", { type: "image/png" }),
-    ]);
-    await screen.findByText("已导入 1 个文件");
-    await user.click(screen.getByRole("button", { name: "开始数据清洗" }));
-
-    const reportFileLabels = await screen.findAllByText("report-page.png");
-    expect(reportFileLabels.length).toBeGreaterThan(0);
     const evidencePanel = screen.getByLabelText("当前问题证据");
     const preview = within(evidencePanel).getByRole("img", { name: "report-page.png 预览" });
     expect(preview).toHaveAttribute("src", "/api/quality/import/quality-import-image123/files/report-page.png");

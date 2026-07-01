@@ -8,7 +8,9 @@ import {
   FileCheck2,
   FileSpreadsheet,
   FileText,
+  FileUp,
   Filter,
+  FolderOpen,
   Pause,
   RefreshCw,
   Search,
@@ -16,9 +18,12 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { QualityDatasetScan, QualityIssueData, QualityMetric } from "@/features/quality/lib/dataset-scanner";
+import type { QualityDatasetScan, QualityIssueData, QualityMetric, QualityPipelineStage } from "@/features/quality/lib/dataset-scanner";
+import { BatchDetectionOverview } from "@/features/quality/components/batch-overview";
+import { ReportExportWorkspace } from "@/features/quality/components/report-export-workspace";
+import type { QualityExportTaskResponse } from "@/features/quality/lib/quality-export-types";
 
 export type QualityWorkspaceView = "batch" | "issues" | "detail" | "review" | "rules" | "export";
 type IssueListVariant = "default" | "screenshot";
@@ -118,19 +123,6 @@ export type QualityExportSummary = {
   ruleHits: QualityExportRuleHit[];
 };
 
-type QualityExportTaskResponse = {
-  id: string;
-  export_type: string;
-  dataset_path: string;
-  status: "queued" | "running" | "done" | "failed";
-  message: string;
-  created_at: string;
-  bundle_name?: string | null;
-  bundle_path?: string | null;
-  download_url?: string | null;
-  artifact_count?: number | null;
-};
-
 type ImportedQualityFile = {
   name: string;
   size: number;
@@ -181,6 +173,7 @@ type QualityScanResponse = {
     dataset_path?: string;
     scanned_at?: string;
     metrics?: QualityMetric[];
+    pipeline?: QualityPipelineStage[];
     issues?: BackendQualityIssue[];
   };
 };
@@ -326,21 +319,16 @@ const fallbackExportSummary: QualityExportSummary = {
     { key: "non-compliant", title: "不合规问题清单", itemCount: 9, description: "人工已确认的问题，适合进入不合规清单。" },
     { key: "possible-compliant", title: "可能合规清单", itemCount: 13, description: "人工已驳回的问题，保留为可能合规样本。" },
     { key: "review-records", title: "人工复核记录", itemCount: 24, description: "确认、驳回、争议和备注记录。" },
+    { key: "evidence-image-index", title: "证据截图索引", itemCount: 31, description: "文件、页码、框选位置和规则 ID。" },
+    { key: "batch-overview-table", title: "批次总体情况表", itemCount: 22, description: "按档案汇总合规状态与问题数量。" },
+    { key: "structured-data", title: "结构化数据导出", itemCount: 22, description: "按档案导出与原始 Excel 相同字段的 .xlsx。" },
+    { key: "compliant-pdfs", title: "合格 PDF 文件夹", itemCount: 10, description: "复制无已确认/待复核问题的 PDF。" },
+    { key: "issue-detail-reports", title: "问题详情分析报告", itemCount: 21, description: "不合规与待复核报告逐份分析。" },
   ],
   ruleHits: [
     { ruleId: "R-FORMAT-002", ruleName: "PDF 页数边界检查", hitCount: 7 },
     { ruleId: "R-OCR-001", ruleName: "OCR 证据完整性", hitCount: 5 },
   ],
-};
-
-const exportDeliverables = ["第三批数据检测报告", "不合规问题清单", "可能合规清单", "人工复核记录", "证据截图索引"];
-
-const exportDeliverableSectionKeys: Record<string, string[]> = {
-  "第三批数据检测报告": ["third-batch-report"],
-  "不合规问题清单": ["non-compliant"],
-  "可能合规清单": ["possible-compliant"],
-  "人工复核记录": ["review-records"],
-  "证据截图索引": ["evidence-image-index"],
 };
 
 const issueFilters: Array<{ value: IssueCategory; label: string }> = [
@@ -564,15 +552,45 @@ export function QualityShell({
   const [operationMessage, setOperationMessage] = useState("");
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [isEvidenceOpen, setIsEvidenceOpen] = useState(true);
-  const [selectedExportName, setSelectedExportName] = useState("第三批数据检测报告");
   const [isDatasetMenuOpen, setIsDatasetMenuOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [exportHistory, setExportHistory] = useState<QualityExportTaskResponse[]>([]);
+  const [scanPipeline, setScanPipeline] = useState<QualityPipelineStage[]>(dataset?.pipeline ?? []);
+  const [scanMetrics, setScanMetrics] = useState<QualityMetric[]>(initialMetrics);
+  const [scannedAtLive, setScannedAtLive] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHistory() {
+      try {
+        const response = await fetch("/api/quality/exports", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as QualityExportTaskResponse[];
+        if (!cancelled) setExportHistory(Array.isArray(data) ? data : []);
+      } catch {
+        // 历史记录读取失败时静默回退到空状态，不影响主要流程
+      }
+    }
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [importSummary]);
 
   const baseIssues = (importedIssues ?? (dataset?.issues?.length ? dataset.issues : fallbackIssues)) as QualityIssue[];
   const issueSource = view === "review" && reviewVariant === "screenshot" ? screenshotIssueListIssues : issueListVariant === "screenshot" ? screenshotIssueListIssues : baseIssues;
-  const metrics = importedIssues ? metricsFromIssues(initialMetrics, importedIssues) : initialMetrics;
-  const scannedAt = dataset?.scannedAt ? formatScannedAt(dataset.scannedAt) : "2025-05-22 14:35:22";
+  const metrics = importedIssues
+    ? metricsFromIssues(scanMetrics.length ? scanMetrics : initialMetrics, importedIssues)
+    : scanMetrics.length
+      ? scanMetrics
+      : initialMetrics;
+  const scannedAt = scannedAtLive
+    ? formatScannedAt(scannedAtLive)
+    : dataset?.scannedAt
+      ? formatScannedAt(dataset.scannedAt)
+      : "2025-05-22 14:35:22";
+  const activeDatasetPath = importSummary?.dataset_path ?? displayDatasetPath;
   const ruleSet = rules?.rules?.length ? rules : { datasetPath: displayDatasetPath, sourceDocument: null, rules: prototypeRules };
   const summary = exportSummary ?? fallbackExportSummary;
 
@@ -619,10 +637,12 @@ export function QualityShell({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          issueId: selectedIssue.id,
+          issue_id: selectedIssue.id,
           decision,
-          datasetPath: displayDatasetPath,
-          message: decisionMessages[decision],
+          reviewer: "operator",
+          note: decisionMessages[decision],
+          evidence: selectedIssue.evidence,
+          dataset_path: activeDatasetPath,
         }),
       });
     } catch {
@@ -630,6 +650,10 @@ export function QualityShell({
     }
     setReviewedStatuses((current) => ({ ...current, [selectedIssue.id]: statusByDecision[decision] }));
     setReviewFeedback(`已记录：${decisionMessages[decision]}`);
+  }
+
+  async function handleToolbarExport() {
+    setOperationMessage("请前往左侧导航「报告导出」页面选择交付物并生成交付包。");
   }
 
   async function handleImportFiles(files: FileList | null) {
@@ -661,6 +685,9 @@ export function QualityShell({
       const data = (await response.json()) as QualityScanResponse;
       const nextIssues = (data.scan?.issues ?? []).map((issue) => mapBackendIssue(issue, importSummary.task_id));
       setImportedIssues(nextIssues);
+      if (data.scan?.pipeline?.length) setScanPipeline(data.scan.pipeline);
+      if (data.scan?.metrics?.length) setScanMetrics(data.scan.metrics);
+      if (data.scan?.scanned_at) setScannedAtLive(data.scan.scanned_at);
       const primary = selectPrimaryImportedIssue(nextIssues);
       if (primary) {
         setSelectedIssueId(primary.id);
@@ -733,9 +760,17 @@ export function QualityShell({
     return <RulesLibrarySnapshotPage />;
   }
 
-  if (view === "export" && exportVariant === "screenshot") {
-    return <ReportExportSnapshotPage exportSummary={summary} />;
+  if (view === "export") {
+    return (
+      <ReportExportWorkspace
+        datasetPath={activeDatasetPath}
+        exportSummary={summary}
+        disputedCount={allIssues.filter((issue) => issue.status === "disputed").length}
+        initialExportHistory={exportHistory}
+      />
+    );
   }
+
   return (
     <div className="min-h-full bg-[#f5f7fb] text-[#202733]">
       <TopToolbar
@@ -747,10 +782,10 @@ export function QualityShell({
           setOperationMessage(isPaused ? "任务已继续运行。" : "任务已暂停，当前结果保持可复核。");
         }}
         onRerun={() => setOperationMessage("已重新运行检测流程。")}
-        onExport={() => setOperationMessage(`导出任务已创建：${selectedExportName}`)}
+        onExport={() => void handleToolbarExport()}
       />
 
-      <main className="grid gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <main className={`grid gap-4 p-4${view === "batch" ? "" : " xl:grid-cols-[minmax(0,1fr)_400px]"}`}>
         <section className="min-w-0 space-y-3">
           <DatasetToolbar
             datasetPath={displayDatasetPath}
@@ -765,11 +800,8 @@ export function QualityShell({
             }}
           />
 
-          {view === "batch" ? <MetricGrid metrics={metrics} /> : null}
-          {view === "batch" ? <DetectionFlow /> : null}
-          {view === "batch" && assetSummary ? <AssetInventoryPanel assetSummary={assetSummary} /> : null}
           {view === "batch" ? (
-            <ImportCleaningPanel
+            <ImportCleaningHeroPanel
               importSummary={importSummary}
               isImporting={isImporting}
               isCleaning={isCleaning}
@@ -777,26 +809,24 @@ export function QualityShell({
               onStartCleaning={handleStartCleaning}
             />
           ) : null}
-          {view === "batch" && importedIssues?.length ? <CleaningResultPanel issues={importedIssues} onSelectIssue={handleSelectIssue} /> : null}
+          {view === "batch" ? <DetectionFlow pipeline={scanPipeline} isCleaning={isCleaning} /> : null}
+          {view === "batch" ? <MetricGrid metrics={metrics} /> : null}
+          {view === "batch" && assetSummary ? <AssetInventoryPanel assetSummary={assetSummary} /> : null}
+          {view === "batch" ? (
+            <BatchDetectionOverview
+              issues={importedIssues ?? baseIssues}
+              assetSummary={assetSummary ?? null}
+              exportHistory={exportHistory}
+            />
+          ) : null}
 
           {view === "detail" && selectedIssue ? (
             <ReportEvidenceWorkspace selectedIssue={selectedIssue} activePage={activePreviewPage} onSelectPage={setActivePreviewPage} />
           ) : null}
           {view === "review" ? <ReviewQueuePanel issues={allIssues} selectedIssue={selectedIssue} onSelectIssue={handleSelectIssue} /> : null}
           {view === "rules" ? <RulesPanel ruleSet={ruleSet} /> : null}
-          {view === "export" ? (
-            <ExportPanel
-              selectedExportName={selectedExportName}
-              datasetPath={displayDatasetPath}
-              exportSummary={summary}
-              onSelectExport={(name) => {
-                setSelectedExportName(name);
-                setOperationMessage(`已选择导出：${name}`);
-              }}
-            />
-          ) : null}
 
-          {view !== "rules" && view !== "export" && view !== "review" ? (
+          {view !== "batch" && view !== "rules" && view !== "review" ? (
             <IssuePanel
               title={view === "issues" ? "问题列表" : meta.issueTitle}
               subtitle={view === "issues" ? "用于批量分诊和跳转详情" : meta.subtitle}
@@ -836,7 +866,7 @@ export function QualityShell({
           ) : null}
         </section>
 
-        {view !== "rules" && view !== "export" && selectedIssue && isEvidenceOpen ? (
+        {view !== "batch" && view !== "rules" && selectedIssue && isEvidenceOpen ? (
           <EvidencePanel
             issue={selectedIssue}
             activePage={activePreviewPage}
@@ -907,7 +937,7 @@ function MetricGrid({ metrics }: { metrics: QualityMetric[] }) {
         const visual = metricVisualFor(metric);
         const Icon = visual.Icon;
         return (
-          <div key={metric.label} className="flex min-h-[106px] items-center gap-4 rounded-lg border border-[#dfe4ea] bg-white px-5 py-4">
+          <div key={metric.label} className="flex min-h-[106px] items-center gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
             <span role="img" aria-label={`${metric.label} 指标图标`} className={`grid h-14 w-14 shrink-0 place-items-center rounded-lg ${visual.containerClassName}`}>
               <Icon aria-hidden="true" className="h-8 w-8" strokeWidth={2.4} />
             </span>
@@ -922,29 +952,39 @@ function MetricGrid({ metrics }: { metrics: QualityMetric[] }) {
   );
 }
 
-function DetectionFlow() {
-  const stages = [
-    { label: "文件扫描", value: "28/28", state: "done" },
-    { label: "Excel 解析", value: "5/5", state: "done" },
-    { label: "PDF 转图", value: "28/28", state: "done" },
-    { label: "AI 评审", value: "处理中 65%", state: "active" },
-    { label: "人工复核", value: "待开始", state: "pending" },
-  ];
+function DetectionFlow({ pipeline, isCleaning }: { pipeline: QualityPipelineStage[]; isCleaning: boolean }) {
+  const stages =
+    pipeline.length > 0
+      ? pipeline
+      : [
+          { label: "文件扫描", value: "待开始", done: false, active: false },
+          { label: "Excel 解析", value: "待开始", done: false, active: false },
+          { label: "PDF 页数", value: "待开始", done: false, active: false },
+          { label: "OCR 证据", value: "待开始", done: false, active: false },
+          { label: "人工复核", value: "待开始", done: false, active: false },
+        ];
   return (
-    <section aria-label="检测流程" className="rounded-lg border border-[#dfe4ea] bg-white px-4 py-4">
+    <section aria-label="检测流程" className="rounded-xl border border-teal-100 bg-gradient-to-r from-teal-50/80 via-white to-white px-4 py-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold text-teal-800">检测进度</h2>
+        {isCleaning ? <span className="text-xs font-medium text-teal-600">扫描进行中...</span> : null}
+      </div>
       <div className="grid gap-3 lg:grid-cols-5">
-        {stages.map((stage, index) => (
-          <div key={stage.label} className="relative flex items-center gap-3">
-            <span className={stage.state === "done" ? "grid h-8 w-8 place-items-center rounded-full bg-[#37b26c] text-white" : stage.state === "active" ? "grid h-8 w-8 place-items-center rounded-full border-2 border-dotted border-[#0b9a9a] text-[#0b8b8b]" : "grid h-8 w-8 place-items-center rounded-full border border-[#94a3b8] text-[#64748b]"}>
-              {stage.state === "done" ? <Check aria-hidden="true" className="h-5 w-5" /> : null}
-            </span>
-            <div>
-              <div className="text-sm font-semibold text-[#0b8b8b]">{stage.label}</div>
-              <div className="text-xs text-[#6b7280]">{stage.value}</div>
+        {stages.map((stage, index) => {
+          const state = isCleaning && stage.active ? "active" : stage.done ? "done" : stage.active ? "active" : "pending";
+          return (
+            <div key={stage.label} className="relative flex items-center gap-3">
+              <span className={state === "done" ? "grid h-8 w-8 place-items-center rounded-full bg-[#37b26c] text-white" : state === "active" ? "grid h-8 w-8 place-items-center rounded-full border-2 border-dotted border-[#0b9a9a] text-[#0b8b8b]" : "grid h-8 w-8 place-items-center rounded-full border border-[#94a3b8] text-[#64748b]"}>
+                {state === "done" ? <Check aria-hidden="true" className="h-5 w-5" /> : null}
+              </span>
+              <div>
+                <div className="text-sm font-semibold text-[#0b8b8b]">{stage.label}</div>
+                <div className="text-xs text-[#6b7280]">{stage.value}</div>
+              </div>
+              {index < stages.length - 1 ? <div className="hidden h-px flex-1 bg-[#0b9a9a]/40 lg:block" /> : null}
             </div>
-            {index < stages.length - 1 ? <div className="hidden h-px flex-1 bg-[#0b9a9a] lg:block" /> : null}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -952,10 +992,10 @@ function DetectionFlow() {
 
 function AssetInventoryPanel({ assetSummary }: { assetSummary: QualityAssetSummary }) {
   return (
-    <section aria-label="数据资产盘点" className="rounded-lg border border-[#dfe4ea] bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-[#151922]">数据资产盘点</h2>
-        <span className="text-sm text-[#5e6978]">共 {assetSummary.totalArchives} 份档案</span>
+    <section aria-label="数据资产盘点" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <h2 className="text-base font-semibold text-slate-800">数据资产盘点</h2>
+        <span className="rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-700">共 {assetSummary.totalArchives} 份档案</span>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-4">
         <InventoryPill label="已匹配档案" value={assetSummary.matchedArchives} tone="green" />
@@ -972,32 +1012,110 @@ function InventoryPill({ label, value, tone }: { label: string; value: number; t
   return <div className={`rounded-md px-3 py-2 text-sm font-semibold ${toneClass}`}>{label} {value}</div>;
 }
 
-function ImportCleaningPanel({ importSummary, isImporting, isCleaning, onImportFiles, onStartCleaning }: { importSummary: QualityImportResponse | null; isImporting: boolean; isCleaning: boolean; onImportFiles: (files: FileList | null) => void; onStartCleaning: () => void }) {
+function ImportCleaningHeroPanel({ importSummary, isImporting, isCleaning, onImportFiles, onStartCleaning }: { importSummary: QualityImportResponse | null; isImporting: boolean; isCleaning: boolean; onImportFiles: (files: FileList | null) => void; onStartCleaning: () => void }) {
+  const totalKB = importSummary ? Math.round(importSummary.total_bytes / 1024) : 0;
+  const importedFiles = importSummary?.files ?? [];
   return (
-    <section className="rounded-lg border border-[#dfe4ea] bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-[#151922]">导入数据清洗文件</h2>
-          <p className="mt-1 text-sm text-[#5e6978]">支持 CSV、XLS、XLSX、PDF 和图片，导入后进入质检扫描。</p>
-        </div>
-        <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#ccd5df] bg-white px-3 text-sm font-medium text-[#344054] hover:bg-[#f7f9fb]">
-          <FileText aria-hidden="true" className="h-4 w-4" />
-          导入文件
-          <input aria-label="选择待清洗文件" type="file" multiple className="sr-only" onChange={(event) => void onImportFiles(event.currentTarget.files)} />
-        </label>
-      </div>
-      {isImporting ? <p role="status" className="mt-3 text-sm text-[#0b8b8b]">正在导入文件...</p> : null}
-      {importSummary ? (
-        <div className="mt-3 rounded-md border border-[#eef2f6] bg-[#f8fafc] p-3">
-          <div className="text-sm font-semibold text-[#202733]">已导入 {importSummary.total_files} 个文件</div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {importSummary.files.map((file) => <span key={`${file.name}-${file.size}`} className="rounded-md border border-[#dfe4ea] bg-white px-2.5 py-1 text-xs text-[#475467]">{file.name}</span>)}
+    <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-teal-50 text-teal-600">
+            <FileUp aria-hidden="true" className="h-5 w-5" />
           </div>
-          <button type="button" disabled={isCleaning} onClick={onStartCleaning} className="mt-3 inline-flex h-9 items-center rounded-md bg-[#0b9a9a] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
-            {isCleaning ? "清洗中..." : "开始数据清洗"}
-          </button>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">导入体检报告数据</h2>
+            <p className="text-sm text-slate-500">支持导入文件夹或单个文件，自动识别 PDF、Excel、图片</p>
+          </div>
         </div>
-      ) : null}
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center transition hover:border-teal-400 hover:bg-teal-50/40">
+            <FolderOpen aria-hidden="true" className="h-7 w-7 text-slate-400 group-hover:text-teal-500" />
+            <span className="text-sm font-medium text-slate-600 group-hover:text-teal-700">导入文件夹</span>
+            <span className="text-xs text-slate-400">选择整个目录，自动递归识别</span>
+            <input
+              aria-label="选择文件夹导入"
+              type="file"
+              multiple
+              // @ts-expect-error -- webkitdirectory 是非标准属性，浏览器支持但 TS DOM 类型未收录
+              webkitdirectory=""
+              directory=""
+              className="sr-only"
+              onChange={(event) => void onImportFiles(event.currentTarget.files)}
+            />
+          </label>
+          <label className="group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center transition hover:border-teal-400 hover:bg-teal-50/40">
+            <FileText aria-hidden="true" className="h-7 w-7 text-slate-400 group-hover:text-teal-500" />
+            <span className="text-sm font-medium text-slate-600 group-hover:text-teal-700">导入文件</span>
+            <span className="text-xs text-slate-400">选择 PDF、Excel、图片等</span>
+            <input
+              aria-label="选择待清洗文件"
+              type="file"
+              multiple
+              className="sr-only"
+              onChange={(event) => void onImportFiles(event.currentTarget.files)}
+            />
+          </label>
+        </div>
+
+        {isImporting ? (
+          <p role="status" className="text-sm text-teal-600">正在导入文件...</p>
+        ) : null}
+
+        {importSummary ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileCheck2 aria-hidden="true" className="h-4 w-4 text-teal-600" />
+                <span className="text-sm font-semibold text-slate-700">
+                  已导入 {importSummary.total_files} 个文件 · {totalKB >= 1024 ? `${(totalKB / 1024).toFixed(1)} MB` : `${totalKB} KB`}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={isCleaning}
+                onClick={onStartCleaning}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-600 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isCleaning ? (
+                  <>
+                    <RefreshCw aria-hidden="true" className="h-4 w-4 animate-spin" />
+                    清洗中...
+                  </>
+                ) : (
+                  <>
+                    <FileCheck2 aria-hidden="true" className="h-4 w-4" />
+                    开始数据清洗
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="max-h-40 overflow-y-auto rounded-md border border-slate-100 bg-white">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">文件名</th>
+                    <th className="px-3 py-2 font-medium">大小</th>
+                    <th className="px-3 py-2 font-medium">类型</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {importedFiles.map((file) => {
+                    const sizeKB = Math.max(1, Math.round(file.size / 1024));
+                    return (
+                      <tr key={`${file.name}-${file.size}`} className="text-slate-600">
+                        <td className="truncate px-3 py-1.5" title={file.name}>{file.name}</td>
+                        <td className="whitespace-nowrap px-3 py-1.5">{sizeKB >= 1024 ? `${(sizeKB / 1024).toFixed(1)} MB` : `${sizeKB} KB`}</td>
+                        <td className="whitespace-nowrap px-3 py-1.5 text-slate-400">{file.type || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -1874,170 +1992,6 @@ function RulesPanel({ ruleSet }: { ruleSet: QualityRuleSet }) {
   );
 }
 
-function ReportExportSnapshotPage({ exportSummary }: { exportSummary: QualityExportSummary }) {
-  const deliverables = [
-    { title: "第三批数据检测报告", description: "PDF，总结、方法、风险分布和结论" },
-    { title: "不合规问题清单", description: "Excel，已确认问题和证据摘要" },
-    { title: "可能合规清单", description: "人工驳回和低风险样本" },
-    { title: "人工复核记录", description: "确认、驳回、争议和备注" },
-    { title: "证据截图索引", description: "文件、页码、框选位置和规则 ID" },
-  ];
-  const previewRows = [
-    { section: "风险摘要", content: "缺字、页数、未脱敏、历史对比", count: "4 类", format: "PDF" },
-    { section: "问题明细", content: "文件、页码、证据、规则、状态", count: `${exportSummary.totalIssues} 条`, format: "Excel" },
-    { section: "复核记录", content: "复核人、决策、备注、时间", count: `${exportSummary.reviewRecordCount} 条`, format: "Excel" },
-    { section: "规则统计", content: "规则命中、严重程度、来源", count: "15 条", format: "Excel" },
-    { section: "证据索引", content: "页面截图路径和框选坐标", count: `${exportSummary.evidenceImageCount} 张`, format: "ZIP" },
-  ];
-  const records = [
-    { date: "2025-05-22", title: "第三批检测报告", status: "完成", tone: "success" },
-    { date: "2025-05-22", title: "不合规问题清单", status: "完成", tone: "success" },
-    { date: "2025-05-21", title: "人工复核记录", status: "复核版", tone: "info" },
-    { date: "2025-05-20", title: "规则命中统计", status: "草稿", tone: "draft" },
-  ];
-
-  return (
-    <div className="min-h-full bg-[#f5f7fb] text-[#111827]">
-      <header className="flex min-h-[62px] items-center justify-between border-b border-[#d9e0e8] bg-white px-6 py-3">
-        <div>
-          <h1 className="text-xl font-semibold leading-6 text-[#111827]">报告导出</h1>
-          <p className="mt-1 text-sm leading-5 text-[#486179]">把筛查结果、复核记录、规则命中统计和证据索引整理成可交付文件。</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">预览交付包</button>
-          <button type="button" className="h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">导出结果</button>
-        </div>
-      </header>
-
-      <main className="grid gap-3 p-4" style={{ gridTemplateColumns: "minmax(0,1.18fr) minmax(0,1.09fr) minmax(0,1fr)" }}>
-        <section className="min-h-[807px] overflow-hidden rounded-lg border border-[#d9e0e8] bg-white">
-          <div className="border-b border-[#d9e0e8] px-4 py-4">
-            <h2 className="text-lg font-semibold text-[#111827]">交付物选择</h2>
-            <p className="mt-1 text-sm text-[#486179]">选择本次要导出的文件</p>
-          </div>
-          <div className="space-y-3 p-3">
-            {deliverables.map((item) => (
-              <button key={item.title} type="button" className="flex w-full items-start justify-between gap-3 rounded-lg border border-[#d9e0e8] bg-white p-3 text-left hover:bg-[#f7f9fb]">
-                <span className="flex min-w-0 items-start gap-3">
-                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border border-[#0b9a9a] text-[#0b9a9a]"><Check aria-hidden="true" className="h-4 w-4" /></span>
-                  <span className="min-w-0">
-                    <span className="block text-lg font-semibold leading-6 text-[#16324f]">{item.title}</span>
-                    <span className="mt-1 block text-sm leading-5 text-[#486179]">{item.description}</span>
-                  </span>
-                </span>
-                <span className="shrink-0 rounded-md border border-[#bbf7d0] bg-[#ecfdf3] px-2 py-1 text-xs font-semibold text-[#15803d]">已选</span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="min-h-[807px] overflow-hidden rounded-lg border border-[#d9e0e8] bg-white">
-          <div className="flex items-start justify-between gap-3 border-b border-[#d9e0e8] px-4 py-4">
-            <div>
-              <h2 className="text-lg font-semibold text-[#111827]">导出预览</h2>
-              <p className="mt-1 text-sm text-[#486179]">面向交付的汇总，不再做分析操作</p>
-            </div>
-            <span className="rounded-md border border-[#bfdbfe] bg-[#eff6ff] px-2.5 py-1 text-xs font-semibold text-[#2563eb]">第三批数据</span>
-          </div>
-          <div className="p-3">
-            <div className="grid grid-cols-4 gap-2">
-              <ExportSnapshotMetric label="总问题" value={String(exportSummary.totalIssues)} description="进入导出范围" />
-              <ExportSnapshotMetric label="已确认" value={String(exportSummary.confirmedIssues)} description="不合规清单" />
-              <ExportSnapshotMetric label="待复核" value={String(exportSummary.pendingIssues)} description="单独列出" />
-              <ExportSnapshotMetric label="争议" value="3" description="附复核意见" />
-            </div>
-            <table className="mt-3 w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-y border-[#d9e0e8] bg-[#f8fafc] text-left text-[#486179]">
-                  <th className="px-3 py-3 font-semibold">导出章节</th>
-                  <th className="px-3 py-3 font-semibold">内容</th>
-                  <th className="px-3 py-3 font-semibold">数量</th>
-                  <th className="px-3 py-3 font-semibold">格式</th>
-                </tr>
-              </thead>
-              <tbody>
-                {previewRows.map((row) => (
-                  <tr key={row.section} className="border-b border-[#e6ebf1]">
-                    <td className="px-3 py-3 font-semibold text-[#16324f]">{row.section}</td>
-                    <td className="px-3 py-3 leading-5 text-[#111827]">{row.content}</td>
-                    <td className="px-3 py-3 text-[#111827]">{row.count}</td>
-                    <td className="px-3 py-3 text-[#111827]">{row.format}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="mt-3 rounded-lg border border-[#a7f3d0] bg-[#ecfdf3] px-3 py-3 text-sm leading-6 text-[#047857]">导出页只处理交付范围和文件格式，不提供复核按钮，避免和人工复核页面重复。</div>
-          </div>
-        </section>
-
-        <aside className="min-h-[807px] overflow-hidden rounded-lg border border-[#d9e0e8] bg-white">
-          <div className="border-b border-[#d9e0e8] px-4 py-4">
-            <h2 className="text-lg font-semibold text-[#111827]">导出记录</h2>
-            <p className="mt-1 text-sm text-[#486179]">保留每次交付版本</p>
-          </div>
-          <div className="p-3">
-            <div className="space-y-0">
-              {records.map((record) => (
-                <div key={`${record.date}-${record.title}`} className="flex items-center justify-between gap-3 border-b border-[#e6ebf1] px-1 py-4 last:border-b-0">
-                  <span className="text-sm text-[#486179]">{record.date}</span>
-                  <span className="text-sm font-semibold text-[#16324f]">{record.title}</span>
-                  <ExportStatusChip status={record.status} tone={record.tone} />
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 rounded-lg border border-[#d9e0e8] bg-white p-3">
-              <h3 className="text-sm font-semibold text-[#111827]">本次导出配置</h3>
-              <p className="mt-3 text-sm leading-6 text-[#486179]">包含已确认、待复核、标记争议和已驳回记录。证据截图以索引方式随 ZIP 输出。</p>
-            </div>
-            <button type="button" className="mt-3 h-10 w-full rounded-md bg-[#0b9a9a] text-sm font-semibold text-white hover:bg-[#087f7f]">生成交付包</button>
-          </div>
-        </aside>
-      </main>
-    </div>
-  );
-}
-
-function ExportSnapshotMetric({ label, value, description }: { label: string; value: string; description: string }) {
-  return (
-    <div className="min-h-[114px] rounded-md border border-[#d9e0e8] bg-white px-3 py-3">
-      <div className="text-sm text-[#486179]">{label}</div>
-      <div className="mt-2 text-3xl font-bold leading-8 text-[#020617]">{value}</div>
-      <div className="mt-2 text-sm leading-5 text-[#486179]">{description}</div>
-    </div>
-  );
-}
-
-function ExportStatusChip({ status, tone }: { status: string; tone: string }) {
-  const className = tone === "success" ? "border-[#bbf7d0] bg-[#ecfdf3] text-[#16a34a]" : tone === "info" ? "border-[#bfdbfe] bg-[#eff6ff] text-[#2563eb]" : "border-[#d9e0e8] bg-[#f8fafc] text-[#486179]";
-  return <span className={`rounded-md border px-2 py-1 text-xs font-semibold ${className}`}>{status}</span>;
-}
-function ExportPanel({ selectedExportName, datasetPath, onSelectExport, exportSummary }: { selectedExportName: string; datasetPath: string; onSelectExport: (name: string) => void; exportSummary: QualityExportSummary }) {
-  const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>(() => Object.fromEntries(exportDeliverables.map((item) => [item, true])));
-  const [exportStatus, setExportStatus] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState("");
-  const [isExporting, setIsExporting] = useState(false);
-  const selectedCount = exportDeliverables.filter((item) => selectedItems[item]).length;
-  const sectionByTitle = useMemo(() => new Map(exportSummary.sections.map((section) => [section.title, section])), [exportSummary.sections]);
-  const ruleHitCount = exportSummary.ruleHits.length > 0 ? exportSummary.ruleHits.length : (exportSummary.sections.find((section) => section.key === "rule-hit-stats")?.itemCount ?? 0);
-  async function createExportPackage() {
-    const selectedSections = Array.from(new Set(exportDeliverables.filter((item) => selectedItems[item]).flatMap((item) => exportDeliverableSectionKeys[item] ?? [])));
-    setIsExporting(true); setDownloadUrl(""); setExportStatus("正在生成交付包...");
-    try {
-      const response = await fetch("/api/quality/exports", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ export_type: selectedExportName, dataset_path: exportSummary.datasetPath || datasetPath, selected_sections: selectedSections }) });
-      const data = (await response.json()) as Partial<QualityExportTaskResponse>;
-      if (!response.ok || typeof data.message !== "string") throw new Error("quality export request failed");
-      setExportStatus(data.message); setDownloadUrl(typeof data.download_url === "string" ? data.download_url : "");
-    } catch { setExportStatus("生成交付包失败：请检查后端服务或稍后重试。"); setDownloadUrl(""); } finally { setIsExporting(false); }
-  }
-  return (
-    <section aria-label="报告导出原型" className="rounded-lg border border-[#dfe4ea] bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-[#151922]">报告导出</h2><p className="mt-1 text-sm text-[#5e6978]">导出页只负责交付范围、文件格式和版本记录。</p></div><span className="rounded-md bg-[#eefafa] px-2.5 py-1 text-xs font-semibold text-[#0b8b8b]">已选择 {selectedCount} 项交付物</span></div>
-      <p className="mt-3 text-sm font-medium text-[#0b8b8b]">当前导出类型：{selectedExportName}</p>
-      {exportStatus ? <div role="status" className="mt-2 rounded-md border border-[#bde8cf] bg-[#ecfbf2] px-3 py-2 text-sm font-semibold text-[#208a4c]"><span>{exportStatus}</span>{downloadUrl ? <a href={downloadUrl} className="ml-3 underline underline-offset-2">下载交付包</a> : null}</div> : null}
-      <div className="mt-4 grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]"><div className="space-y-3">{exportDeliverables.map((item) => { const liveSection = sectionByTitle.get(item); return <div key={item} className="rounded-md border border-[#dfe4ea] bg-[#f7f9fb] p-3"><label className="flex items-start gap-3"><input type="checkbox" className="mt-1 h-4 w-4 accent-[#0b9a9a]" checked={Boolean(selectedItems[item])} onChange={() => setSelectedItems((current) => ({ ...current, [item]: !current[item] }))} aria-label={item} /><span className="min-w-0"><span className="block text-sm font-semibold text-[#202733]">{item}</span><span className="mt-1 block text-xs leading-5 text-[#5e6978]">{liveSection?.description ?? exportDescriptionFor(item)}</span></span></label><button type="button" onClick={() => onSelectExport(item)} className="mt-3 rounded-md border bg-white px-3 py-1.5 text-xs font-semibold text-[#303846]">{item}</button></div>; })}</div><div className="space-y-3"><div className="rounded-md border border-[#dfe4ea] bg-[#f7f9fb] p-4"><h3 className="text-sm font-semibold text-[#151922]">导出预览</h3><table className="mt-3 w-full border-collapse text-sm"><tbody><tr className="border-b border-[#dfe4ea]"><td className="py-2 text-[#5e6978]">问题明细</td><td className="py-2 text-right font-semibold">{exportSummary.totalIssues} 条</td></tr><tr className="border-b border-[#dfe4ea]"><td className="py-2 text-[#5e6978]">复核记录</td><td className="py-2 text-right font-semibold">{exportSummary.reviewRecordCount} 条</td></tr><tr className="border-b border-[#dfe4ea]"><td className="py-2 text-[#5e6978]">规则命中</td><td className="py-2 text-right font-semibold">{ruleHitCount} 条</td></tr><tr><td className="py-2 text-[#5e6978]">证据截图</td><td className="py-2 text-right font-semibold">{exportSummary.evidenceImageCount} 张</td></tr></tbody></table></div><div className="rounded-md border border-[#dfe4ea] bg-white p-4"><div className="text-sm text-[#5e6978]">复核记录</div><h3 className="mt-1 text-sm font-semibold text-[#151922]">交付范围</h3><div className="mt-3 space-y-3">{exportSummary.sections.map((section) => <div key={section.key} className="rounded-md border border-[#eef2f6] bg-[#f7f9fb] px-3 py-2"><div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold text-[#202733]">{section.title}</span><span className="text-xs font-semibold text-[#0b8b8b]">{section.itemCount}</span></div><p className="mt-1 text-xs leading-5 text-[#5e6978]">{section.description}</p></div>)}</div></div><button type="button" disabled={isExporting || selectedCount === 0} onClick={() => void createExportPackage()} className="w-full rounded-md bg-[#0b9a9a] px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">{isExporting ? "生成中..." : "生成交付包"}</button></div></div>
-    </section>
-  );
-}
 function SummaryBlock({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-[#eef2f6] p-4"><div className="text-xs font-medium text-[#7b8794]">{label}</div><p className="mt-2 text-sm text-[#202733]">{value}</p></div>;
 }
@@ -2204,12 +2158,4 @@ function formatScannedAt(value: string) {
   const isoMatch = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/);
   if (isoMatch) return `${isoMatch[1]} ${isoMatch[2]}`;
   return value.replace("T", " ").replace(/\.\d+Z?$/, "");
-}
-
-function exportDescriptionFor(item: string) {
-  if (item === "第三批数据检测报告") return "PDF，总结方法、风险分布和检测结论。";
-  if (item === "不合规问题清单") return "Excel，已确认问题、证据摘要和规则 ID。";
-  if (item === "可能合规清单") return "人工驳回、低风险样本和可复查记录。";
-  if (item === "人工复核记录") return "确认、驳回、争议、备注和复核人。";
-  return "文件、页码、框选位置和截图索引。";
 }

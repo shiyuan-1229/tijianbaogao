@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from dataclasses import asdict, dataclass
@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import json
 import re
+import shutil
 from typing import Literal
 from uuid import uuid4
 from zipfile import ZipFile
@@ -112,6 +113,7 @@ class QualityExportTask:
     bundle_path: str | None = None
     download_url: str | None = None
     artifact_count: int | None = None
+    export_dir: str | None = None
 
 
 @dataclass(frozen=True)
@@ -506,13 +508,13 @@ def create_export_task(
     review_status_by_issue = _latest_review_status_by_issue(review_records)
     confirmed_issues, rejected_issues, pending_issues = _split_export_issues(issues, review_status_by_issue)
     section_keys = _normalize_export_section_keys(selected_sections)
-    export_dir = _quality_export_dir(storage_root, task_id)
+    export_dir = _quality_export_dir(storage_root, task_id, root, timestamp)
     export_dir.mkdir(parents=True, exist_ok=True)
     artifact_count = 0
 
     if "third-batch-report" in section_keys:
         _write_text(
-            export_dir / "third-batch-report.md",
+            _export_section_file(export_dir, "third-batch-report", "third-batch-report.md"),
             _build_quality_export_report(
                 summary=summary,
                 asset_summary=asset_summary,
@@ -524,25 +526,62 @@ def create_export_task(
         )
         artifact_count += 1
     if "non-compliant" in section_keys:
-        _write_jsonl_records(export_dir / "non-compliant-issues.jsonl", [_issue_export_payload(issue, "confirmed") for issue in confirmed_issues])
+        _write_jsonl_records(
+            _export_section_file(export_dir, "non-compliant", "non-compliant-issues.jsonl"),
+            [_issue_export_payload(issue, "confirmed") for issue in confirmed_issues],
+        )
         artifact_count += 1
     if "possible-compliant" in section_keys:
-        _write_jsonl_records(export_dir / "possible-compliant-issues.jsonl", [_issue_export_payload(issue, "rejected") for issue in rejected_issues])
+        _write_jsonl_records(
+            _export_section_file(export_dir, "possible-compliant", "possible-compliant-issues.jsonl"),
+            [_issue_export_payload(issue, "rejected") for issue in rejected_issues],
+        )
         artifact_count += 1
     if "needs-review" in section_keys:
-        _write_jsonl_records(export_dir / "needs-review-issues.jsonl", [_issue_export_payload(issue, "needs_review") for issue in pending_issues])
+        _write_jsonl_records(
+            _export_section_file(export_dir, "needs-review", "needs-review-issues.jsonl"),
+            [_issue_export_payload(issue, "needs_review") for issue in pending_issues],
+        )
         artifact_count += 1
     if "review-records" in section_keys:
-        _write_jsonl_records(export_dir / "review-records.jsonl", [asdict(record) for record in review_records])
+        _write_jsonl_records(
+            _export_section_file(export_dir, "review-records", "review-records.jsonl"),
+            [asdict(record) for record in review_records],
+        )
         artifact_count += 1
     if "rule-hit-stats" in section_keys:
-        _write_json(export_dir / "rule-hit-stats.json", {"dataset_path": summary.dataset_path, "generated_at": summary.generated_at, "rule_hits": [asdict(rule_hit) for rule_hit in summary.rule_hits]})
+        _write_json(
+            _export_section_file(export_dir, "rule-hit-stats", "rule-hit-stats.json"),
+            {"dataset_path": summary.dataset_path, "generated_at": summary.generated_at, "rule_hits": [asdict(rule_hit) for rule_hit in summary.rule_hits]},
+        )
         artifact_count += 1
     if "evidence-image-index" in section_keys:
-        _write_json(export_dir / "evidence-image-index.json", {"dataset_path": summary.dataset_path, "evidence_images": _build_evidence_image_index(issues, review_status_by_issue)})
+        _write_json(
+            _export_section_file(export_dir, "evidence-image-index", "evidence-image-index.json"),
+            {"dataset_path": summary.dataset_path, "evidence_images": _build_evidence_image_index(issues, review_status_by_issue)},
+        )
         artifact_count += 1
+    if "batch-overview-table" in section_keys:
+        _write_batch_overview_xlsx(
+            _export_section_file(export_dir, "batch-overview-table", "批次总体情况表.xlsx"),
+            asset_summary,
+            issues,
+            review_status_by_issue,
+        )
+        artifact_count += 1
+    if "structured-data" in section_keys:
+        artifact_count += _export_structured_data_tables(_export_section_dir(export_dir, "structured-data"), root)
+    if "compliant-pdfs" in section_keys:
+        artifact_count += _export_compliant_pdfs(_export_section_dir(export_dir, "compliant-pdfs"), root, issues, review_status_by_issue)
+    if "issue-detail-reports" in section_keys:
+        artifact_count += _export_issue_detail_reports(
+            _export_section_dir(export_dir, "issue-detail-reports"),
+            issues,
+            review_status_by_issue,
+            include_statuses={"confirmed", "needs_review", "ai_reviewing", "disputed"},
+        )
     if "export-summary" in section_keys:
-        _write_json(export_dir / "export-summary.json", asdict(summary))
+        _write_json(_export_section_file(export_dir, "export-summary", "export-summary.json"), asdict(summary))
         artifact_count += 1
 
     bundle_name = f"quality-export-{task_id}.zip"
@@ -554,12 +593,13 @@ def create_export_task(
         export_type=export_type.strip(),
         dataset_path=str(root),
         status="done",
-        message=f"已生成交付包：{bundle_name}，包含 {artifact_count} 个文件。",
+        message=f"已生成交付包：{bundle_name}，包含 {artifact_count} 个文件。文件夹：{export_dir}",
         created_at=timestamp.isoformat(),
         bundle_name=bundle_name,
         bundle_path=str(bundle_path),
         download_url=f"/api/quality/exports/{task_id}/download",
         artifact_count=artifact_count,
+        export_dir=str(export_dir),
     )
     _EXPORT_TASKS.append(task)
     _append_jsonl(_export_tasks_path(storage_root), asdict(task))
@@ -647,6 +687,30 @@ def build_quality_export_summary(
             item_count=len(rule_hits),
             description="按规则 ID 汇总当前数据集的命中次数。",
         ),
+        QualityExportSection(
+            key="batch-overview-table",
+            title="批次总体情况表",
+            item_count=asset_summary.total_archives,
+            description="按档案汇总合规状态、问题数量和文件完整性，输出 Excel。",
+        ),
+        QualityExportSection(
+            key="structured-data",
+            title="结构化数据导出",
+            item_count=asset_summary.total_archives,
+            description="按档案导出与原始 Excel 相同字段结构的 .xlsx 文件。",
+        ),
+        QualityExportSection(
+            key="compliant-pdfs",
+            title="合格 PDF 文件夹",
+            item_count=max(asset_summary.total_pdf_files - confirmed_issues, 0),
+            description="合格PDF/ 子目录存放无问题的 PDF 文件。",
+        ),
+        QualityExportSection(
+            key="issue-detail-reports",
+            title="问题详情分析报告",
+            item_count=confirmed_issues + pending_issues,
+            description="为不合规与待复核报告生成逐份问题分析。",
+        ),
     ]
 
     return QualityExportSummary(
@@ -678,6 +742,14 @@ EXPORT_SECTION_ALIASES: dict[str, list[str]] = {
     "rule-hit-stats": ["rule-hit-stats"],
     "规则命中统计": ["rule-hit-stats"],
     "export-summary": ["export-summary"],
+    "batch-overview-table": ["batch-overview-table"],
+    "批次总体情况表": ["batch-overview-table"],
+    "structured-data": ["structured-data"],
+    "结构化数据导出": ["structured-data"],
+    "compliant-pdfs": ["compliant-pdfs"],
+    "合格 PDF 文件夹": ["compliant-pdfs"],
+    "issue-detail-reports": ["issue-detail-reports"],
+    "问题详情分析报告": ["issue-detail-reports"],
 }
 
 DEFAULT_EXPORT_SECTION_KEYS = {
@@ -689,6 +761,21 @@ DEFAULT_EXPORT_SECTION_KEYS = {
     "rule-hit-stats",
     "evidence-image-index",
     "export-summary",
+}
+
+EXPORT_SECTION_FOLDERS: dict[str, str] = {
+    "third-batch-report": "检测报告",
+    "non-compliant": "不合规问题清单",
+    "possible-compliant": "可能合规清单",
+    "needs-review": "待复核问题清单",
+    "review-records": "人工复核记录",
+    "rule-hit-stats": "规则命中统计",
+    "evidence-image-index": "证据截图索引",
+    "batch-overview-table": "批次总体情况表",
+    "structured-data": "结构化数据",
+    "compliant-pdfs": "合格PDF",
+    "issue-detail-reports": "问题详情分析",
+    "export-summary": "导出摘要",
 }
 
 
@@ -707,7 +794,7 @@ def _normalize_export_section_keys(selected_sections: list[str] | None) -> set[s
         else:
             resolved.add(normalized)
 
-    resolved.update({"needs-review", "rule-hit-stats", "export-summary"})
+    resolved.update({"export-summary"})
     return resolved or set(DEFAULT_EXPORT_SECTION_KEYS)
 
 
@@ -824,10 +911,187 @@ def _write_jsonl_records(path: Path, records: list[dict[str, object]]) -> None:
 
 def _zip_export_dir(export_dir: Path, bundle_path: Path) -> None:
     with ZipFile(bundle_path, "w") as archive:
-        for file_path in sorted(export_dir.iterdir()):
-            if file_path == bundle_path or not file_path.is_file():
+        for file_path in sorted(export_dir.rglob("*")):
+            if file_path == bundle_path or file_path.is_dir():
                 continue
-            archive.write(file_path, arcname=file_path.name)
+            archive.write(file_path, arcname=file_path.relative_to(export_dir).as_posix())
+
+
+def _resolved_issue_status(
+    issue: QualityIssue,
+    review_status_by_issue: dict[str, ReviewStatus | Literal["disputed"]],
+) -> ReviewStatus | Literal["disputed"]:
+    return review_status_by_issue.get(issue.id, issue.status)
+
+
+def _file_compliance_label(
+    file_name: str,
+    issues: list[QualityIssue],
+    review_status_by_issue: dict[str, ReviewStatus | Literal["disputed"]],
+) -> str:
+    file_issues = [issue for issue in issues if issue.file_name == file_name]
+    if not file_issues:
+        return "合格"
+    if any(_resolved_issue_status(issue, review_status_by_issue) == "confirmed" for issue in file_issues):
+        return "不合规"
+    if any(_resolved_issue_status(issue, review_status_by_issue) in {"needs_review", "ai_reviewing", "disputed"} for issue in file_issues):
+        return "待复核"
+    return "合格"
+
+
+def _write_xlsx_rows(path: Path, rows: list[list[str]]) -> None:
+    from openpyxl import Workbook
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Sheet1"
+    for row in rows:
+        worksheet.append(row)
+    workbook.save(path)
+
+
+def _write_batch_overview_xlsx(
+    path: Path,
+    asset_summary: object,
+    issues: list[QualityIssue],
+    review_status_by_issue: dict[str, ReviewStatus | Literal["disputed"]],
+) -> None:
+    issues_by_archive: dict[tuple[str, str], list[QualityIssue]] = {}
+    for issue in issues:
+        key = (issue.group, issue.archive_id)
+        issues_by_archive.setdefault(key, []).append(issue)
+
+    rows: list[list[str]] = [[
+        "年龄段",
+        "档案号",
+        "PDF文件数",
+        "Excel文件数",
+        "就诊次数",
+        "问题数",
+        "高严重度问题",
+        "合规状态",
+        "缺失项",
+    ]]
+    for asset in asset_summary.assets:
+        archive_issues = issues_by_archive.get((asset.group, asset.archive_id), [])
+        high_count = sum(1 for issue in archive_issues if issue.severity == "high")
+        pdf_names = asset.pdf_files
+        compliance = "合格"
+        if any(_resolved_issue_status(issue, review_status_by_issue) == "confirmed" for issue in archive_issues):
+            compliance = "不合规"
+        elif any(_resolved_issue_status(issue, review_status_by_issue) in {"needs_review", "ai_reviewing", "disputed"} for issue in archive_issues):
+            compliance = "待复核"
+        elif archive_issues and all(_resolved_issue_status(issue, review_status_by_issue) == "rejected" for issue in archive_issues):
+            compliance = "可能合规"
+        missing_labels = {
+            "missing_pdf": "缺 PDF",
+            "missing_excel": "缺 Excel",
+            "under_three_visits": "少于 3 次就诊",
+        }
+        rows.append([
+            asset.group,
+            asset.archive_id,
+            str(len(pdf_names)),
+            str(len(asset.excel_files)),
+            str(asset.visit_count),
+            str(len(archive_issues)),
+            str(high_count),
+            compliance,
+            "、".join(missing_labels.get(item, item) for item in asset.missing_items) if asset.missing_items else "",
+        ])
+    _write_xlsx_rows(path, rows)
+
+
+def _export_structured_data_tables(output_dir: Path, root: Path) -> int:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grouped_rows: dict[str, list[list[str]]] = {}
+    count = 0
+    for dataset_file in _collect_dataset_files(root):
+        if dataset_file.extension != ".xlsx":
+            continue
+        rows = _read_first_worksheet_rows(dataset_file.path)
+        if not rows:
+            continue
+        headers = rows[0]
+        archive_index = headers.index("ArchivesNum") if "ArchivesNum" in headers else -1
+        if archive_index < 0:
+            continue
+        for row in rows[1:]:
+            archive_id = row[archive_index].strip() if archive_index < len(row) else ""
+            if not archive_id:
+                continue
+            key = f"{dataset_file.group}_{archive_id}" if dataset_file.group else archive_id
+            if key not in grouped_rows:
+                grouped_rows[key] = [headers]
+            grouped_rows[key].append(row)
+    for key, rows in sorted(grouped_rows.items()):
+        safe_name = re.sub(r'[<>:"/\\\\|?*]+', "_", key)
+        _write_xlsx_rows(output_dir / f"{safe_name}.xlsx", rows)
+        count += 1
+    return count
+
+
+def _export_compliant_pdfs(
+    output_dir: Path,
+    root: Path,
+    issues: list[QualityIssue],
+    review_status_by_issue: dict[str, ReviewStatus | Literal["disputed"]],
+) -> int:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    file_map = {dataset_file.name: dataset_file.path for dataset_file in _collect_dataset_files(root) if dataset_file.extension == ".pdf"}
+    copied = 0
+    for file_name, source_path in sorted(file_map.items()):
+        if _file_compliance_label(file_name, issues, review_status_by_issue) != "合格":
+            continue
+        target = output_dir / file_name
+        shutil.copy2(source_path, target)
+        copied += 1
+    return copied
+
+
+def _export_issue_detail_reports(
+    output_dir: Path,
+    issues: list[QualityIssue],
+    review_status_by_issue: dict[str, ReviewStatus | Literal["disputed"]],
+    *,
+    include_statuses: set[str],
+) -> int:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grouped: dict[str, list[QualityIssue]] = {}
+    for issue in issues:
+        status = _resolved_issue_status(issue, review_status_by_issue)
+        if status not in include_statuses:
+            continue
+        grouped.setdefault(issue.file_name, []).append(issue)
+
+    count = 0
+    for file_name, file_issues in sorted(grouped.items()):
+        safe_name = re.sub(r'[<>:"/\\\\|?*]+', "_", Path(file_name).stem)
+        lines = [
+            f"# {file_name} 问题详情分析",
+            "",
+            f"- 问题数量：{len(file_issues)}",
+            "",
+        ]
+        for index, issue in enumerate(file_issues, start=1):
+            status = _resolved_issue_status(issue, review_status_by_issue)
+            lines.extend([
+                f"## 问题 {index}",
+                f"- 状态：{status}",
+                f"- 类型：{issue.issue_type}",
+                f"- 严重程度：{issue.severity}",
+                f"- 规则：{issue.rule_id}",
+                f"- 页码：{issue.page}",
+                f"- 证据：{issue.evidence}",
+                f"- AI 判断：{issue.ai_judgement}",
+                f"- 处理建议：{issue.recommendation}",
+                f"- 置信度：{issue.confidence}",
+                "",
+            ])
+        _write_text(output_dir / f"{safe_name}.md", "\n".join(lines))
+        count += 1
+    return count
 def list_review_records(
     *,
     dataset_path: str | Path | None = None,
@@ -889,8 +1153,35 @@ def _quality_state_dir(storage_root: str | Path | None) -> Path:
     return Path(storage_root or settings.local_storage_root) / "quality"
 
 
-def _quality_export_dir(storage_root: str | Path | None, task_id: str) -> Path:
-    return _quality_state_dir(storage_root) / "exports" / task_id
+def _quality_deliverables_root(storage_root: str | Path | None) -> Path:
+    storage = Path(storage_root or settings.local_storage_root).resolve()
+    deliverables_name = settings.quality_deliverables_root.strip() or "质检交付"
+    if storage.name == "data":
+        return storage.parent / deliverables_name
+    return storage / deliverables_name
+
+
+def _quality_export_dir(
+    storage_root: str | Path | None,
+    task_id: str,
+    dataset_path: Path,
+    timestamp: datetime,
+) -> Path:
+    dataset_label = re.sub(r'[<>:"/\\\\|?*\\s]+', "_", dataset_path.name or "dataset").strip("._") or "dataset"
+    stamp = timestamp.strftime("%Y%m%d_%H%M%S")
+    short_id = task_id.removeprefix("export-")
+    return _quality_deliverables_root(storage_root) / f"{dataset_label}_{stamp}_{short_id}"
+
+
+def _export_section_dir(export_dir: Path, section_key: str) -> Path:
+    folder_name = EXPORT_SECTION_FOLDERS.get(section_key, section_key)
+    target_dir = export_dir / folder_name
+    target_dir.mkdir(parents=True, exist_ok=True)
+    return target_dir
+
+
+def _export_section_file(export_dir: Path, section_key: str, file_name: str) -> Path:
+    return _export_section_dir(export_dir, section_key) / file_name
 
 def _review_records_path(storage_root: str | Path | None) -> Path:
     return _quality_state_dir(storage_root) / "review-records.jsonl"

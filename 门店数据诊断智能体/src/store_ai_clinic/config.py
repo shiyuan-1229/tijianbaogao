@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     app_name: str = "Store AI Data Clinic"
     database_url: str = "postgresql+psycopg://clinic:clinic@localhost:5432/clinic"
     local_storage_root: str = "data"
+    quality_deliverables_root: str = "质检交付"
     default_timezone: str = "Asia/Shanghai"
     streamlit_entry: str = "streamlit_app.py"
     api_base_url: str = "http://127.0.0.1:8000"
@@ -59,7 +60,7 @@ class Settings(BaseSettings):
             return value or None
         return value
 
-    @field_validator("database_url", "local_storage_root", "default_timezone", "streamlit_entry", "api_base_url")
+    @field_validator("database_url", "local_storage_root", "quality_deliverables_root", "default_timezone", "streamlit_entry", "api_base_url")
     @classmethod
     def _strip_required_string(cls, value: str) -> str:
         return value.strip()

@@ -6,14 +6,15 @@ import QualityPage from "@/app/(workspace)/quality/page";
 import TasksPage from "@/app/(workspace)/tasks/page";
 
 describe("inspection workspace redesign", () => {
-  it("renders batch inspection with the screenshot-style toolbar and evidence panel", async () => {
+  it("renders batch inspection with the screenshot-style toolbar", async () => {
     render(await QualityPage());
 
     expect(screen.getByText("批量检测工作台")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "暂停任务" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "重新运行" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
-    expect(screen.getByText("体检报告页面预览")).toBeInTheDocument();
+    expect(screen.queryByText("体检报告页面预览")).not.toBeInTheDocument();
+    expect(screen.queryByText("高优先级问题")).not.toBeInTheDocument();
   });
 
   it("renders the issue list as part of the same inspection product", async () => {

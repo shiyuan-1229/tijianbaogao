@@ -164,6 +164,7 @@ class QualityExportTask(BaseModel):
     bundle_path: str | None = None
     download_url: str | None = None
     artifact_count: int | None = None
+    export_dir: str | None = None
 
 
 class QualityExportSection(BaseModel):

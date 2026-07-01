@@ -70,11 +70,7 @@ export function ReportExportWorkspace({
   const [exportStatus, setExportStatus] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
   const [isExporting, setIsExporting] = useState(false);
-  const [exportHistory, setExportHistory] = useState<QualityExportTaskResponse[]>(initialExportHistory);
-
-  useEffect(() => {
-    setExportHistory(initialExportHistory);
-  }, [initialExportHistory]);
+  const [exportHistory, setExportHistory] = useState<QualityExportTaskResponse[]>(() => initialExportHistory);
 
   useEffect(() => {
     if (!loadExportHistory) return;
@@ -175,7 +171,7 @@ export function ReportExportWorkspace({
             <p className="text-xs font-semibold uppercase tracking-wide text-teal-600">交付中心</p>
             <h1 className="mt-1 text-2xl font-semibold text-slate-900">报告导出</h1>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-              把筛查结果、复核记录、结构化数据、合格 PDF 和问题分析整理成可交付 ZIP 包。
+              只整理客户可读、可继续处理的交付文件，避免把过程数据和技术索引打进 ZIP 包。
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -286,7 +282,7 @@ export function ReportExportWorkspace({
           <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-sky-50/60 to-white px-5 py-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">导出预览</h2>
-              <p className="mt-1 text-sm text-slate-500">面向交付的汇总，不再做分析操作</p>
+              <p className="mt-1 text-sm text-slate-500">只预览本次会进入 ZIP 的可用文件</p>
             </div>
             <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">
               {datasetLabel}
@@ -337,7 +333,7 @@ export function ReportExportWorkspace({
               </table>
             </div>
             <p className="mt-4 rounded-xl border border-teal-100 bg-teal-50/50 px-3 py-3 text-xs leading-5 text-teal-800">
-              导出后可在项目目录 <strong>质检交付/</strong> 下直接打开各子文件夹；浏览器下载的 ZIP 解压后结构相同。
+              导出后可直接打开 HTML 报告、Excel 汇总、结构化数据和合格 PDF 文件夹；浏览器下载的 ZIP 解压后结构相同。
             </p>
           </div>
         </section>
@@ -392,7 +388,7 @@ export function ReportExportWorkspace({
             <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <h3 className="text-sm font-semibold text-slate-800">本次导出配置</h3>
               <p className="mt-2 text-xs leading-5 text-slate-600">
-                包含 {selectedCount} 类交付物。ZIP 内附带 export-summary.json 元数据，便于追溯批次与规则命中。
+                包含 {selectedCount} 类可用交付物。ZIP 不再默认附带 JSONL、规则命中统计、证据索引等技术文件。
               </p>
               <p className="mt-2 text-xs text-slate-500">
                 存储目录见页面底部说明，或联系管理员查看 <code className="rounded bg-white px-1">data/quality/exports/</code>
@@ -421,7 +417,7 @@ export function ReportExportWorkspace({
           创建独立文件夹，并按类型分子目录：检测报告、批次总体情况表、结构化数据、合格PDF、问题详情分析等。
         </p>
         <p className="mt-1">
-          同时会生成 <code className="rounded bg-slate-100 px-1.5 py-0.5">quality-export-{"{任务ID}"}.zip</code> 供浏览器下载；解压后与文件夹内容一致。
+          同时会生成 <code className="rounded bg-slate-100 px-1.5 py-0.5">体检报告质检交付包_{"{数据集名}"}_{"{时间}"}.zip</code> 供浏览器下载；解压后与文件夹内容一致。
         </p>
       </footer>
     </div>

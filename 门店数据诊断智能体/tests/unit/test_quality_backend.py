@@ -914,7 +914,7 @@ def test_quality_export_task_generates_real_delivery_package(tmp_path: Path):
     )
 
     assert export.status == "done"
-    assert export.artifact_count and export.artifact_count >= 7
+    assert export.artifact_count and export.artifact_count >= 4
     assert export.bundle_name and export.bundle_name.endswith(".zip")
     assert export.bundle_path
     assert export.download_url == f"/api/quality/exports/{export.id}/download"
@@ -924,27 +924,23 @@ def test_quality_export_task_generates_real_delivery_package(tmp_path: Path):
 
     with ZipFile(bundle_path) as archive:
         names = set(archive.namelist())
-        assert any(name.endswith("third-batch-report.md") for name in names)
-        assert any(name.endswith("non-compliant-issues.jsonl") for name in names)
-        assert any(name.endswith("possible-compliant-issues.jsonl") for name in names)
-        assert any(name.endswith("needs-review-issues.jsonl") for name in names)
-        assert any(name.endswith("review-records.jsonl") for name in names)
-        assert any(name.endswith("rule-hit-stats.json") for name in names)
-        assert any(name.endswith("evidence-image-index.json") for name in names)
-        assert any(name.endswith("export-summary.json") for name in names)
-        report_path = next(name for name in names if name.endswith("third-batch-report.md"))
-        report = archive.read(report_path).decode("utf-8")
-        assert "第三批数据检测报告" in report
-        assert "总问题：3" in report
-        confirmed_path = next(name for name in names if name.endswith("non-compliant-issues.jsonl"))
-        rejected_path = next(name for name in names if name.endswith("possible-compliant-issues.jsonl"))
-        pending_path = next(name for name in names if name.endswith("needs-review-issues.jsonl"))
-        confirmed = archive.read(confirmed_path).decode("utf-8")
-        rejected = archive.read(rejected_path).decode("utf-8")
-        pending = archive.read(pending_path).decode("utf-8")
-        assert "R-FORMAT-002" in confirmed
-        assert "R-OCR-001" in rejected
-        assert "R-EXCEL-001" in pending
+        assert "00-交付包说明.html" in names
+        assert "01-批次质检总报告.html" in names
+        assert any("批次总体情况表" in name and name.endswith(".xlsx") for name in names)
+        assert any("结构化数据" in name and name.endswith(".xlsx") for name in names)
+        assert any(name.startswith("02-逐份报告问题说明/") and name.endswith(".html") for name in names)
+        assert not any(name.endswith("third-batch-report.md") for name in names)
+        assert not any(name.endswith("non-compliant-issues.jsonl") for name in names)
+        assert not any(name.endswith("possible-compliant-issues.jsonl") for name in names)
+        assert not any(name.endswith("needs-review-issues.jsonl") for name in names)
+        assert not any(name.endswith("review-records.jsonl") for name in names)
+        assert not any(name.endswith("rule-hit-stats.json") for name in names)
+        assert not any(name.endswith("evidence-image-index.json") for name in names)
+        assert not any(name.endswith("export-summary.json") for name in names)
+        report = archive.read("01-批次质检总报告.html").decode("utf-8")
+        assert "批次质检总报告" in report
+        assert "R-FORMAT-002" in report
+        assert "R-EXCEL-001" in report
 
 
 def test_quality_api_can_download_generated_export_bundle(tmp_path: Path, monkeypatch):
@@ -1086,6 +1082,10 @@ def test_quality_export_does_not_render_pdf_pages_during_package_generation(tmp_
     assert export.status == "done"
     assert export.bundle_path
 
+    with ZipFile(Path(export.bundle_path)) as archive:
+        names = set(archive.namelist())
+        assert any(name.endswith("export-summary.json") for name in names)
+
 def test_quality_export_creates_customer_readable_html_entrypoints(tmp_path: Path):
     dataset = build_quality_sample(tmp_path)
     storage_root = tmp_path / "customer-export-state"
@@ -1098,7 +1098,6 @@ def test_quality_export_creates_customer_readable_html_entrypoints(tmp_path: Pat
             "third-batch-report",
             "batch-overview-table",
             "issue-detail-reports",
-            "export-summary",
         ],
         now="2026-06-30T12:20:00+08:00",
     )
@@ -1145,7 +1144,6 @@ def test_quality_export_batch_deliverables(tmp_path: Path):
             "structured-data",
             "compliant-pdfs",
             "issue-detail-reports",
-            "export-summary",
         ],
         now="2026-06-30T12:20:00+08:00",
     )
@@ -1161,7 +1159,9 @@ def test_quality_export_batch_deliverables(tmp_path: Path):
         names = set(archive.namelist())
         assert any("批次总体情况表" in name and name.endswith(".xlsx") for name in names)
         assert any("结构化数据" in name and name.endswith(".xlsx") for name in names)
-        assert any("问题详情分析" in name and name.endswith(".md") for name in names)
+        assert any("02-逐份报告问题说明" in name and name.endswith(".html") for name in names)
+        assert not any("问题详情分析" in name and name.endswith(".md") for name in names)
+        assert not any(name.endswith("export-summary.json") for name in names)
         overview_path = next(name for name in names if "批次总体情况表" in name and name.endswith(".xlsx"))
         from openpyxl import load_workbook
         from io import BytesIO

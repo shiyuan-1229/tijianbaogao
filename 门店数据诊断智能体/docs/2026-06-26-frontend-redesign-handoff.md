@@ -1378,28 +1378,148 @@ npm test -- tests/unit/quality-shell-interactions.test.tsx
    - 前端 BFF `/api/quality/exports` 是否返回 JSON，而不是 Next 错误页
 5. 交付包生成不应再触发 PDF 渲染；如果后续改动重新调用 `_default_pdf_page_renderer()`，会导致真实数据集导出再次变慢或超时。
 
-## 12. 2026-07-01 最新分支同步、用户反馈与慢加载问题交接
+## 12. 2026-07-01 规则库合并布局与可用交付包收口
 
-### 12.1 本轮对话背景
+### 12.1 用户反馈
 
-本轮用户连续提出了以下需求和问题：
+用户在规则库页截图基础上继续反馈：
 
-1. 先阅读项目内所有交接文档与 `agent.md`，确认产品边界和当前交接状态。
-2. 修复“每轮检测”位置没有同步更新的问题，并参考截图做可更新的可视化图形。
-3. 修复其他页面前端不更新的问题，继续检查功能缺失、排版不合适、内容重复、页面信息不清楚的问题。
-4. 拉取队友上传到分支的代码，先暂存用户本地改动，再在保留队友修改的基础上合并用户改动；如出现功能冲突再询问保留哪个。
-5. 用户只上传了一个 PDF，但报告导出界面显示不符合预期，希望只导出新上传文件的分析报告。
-6. “问题清单”页面不要展示证据详情和单份报告问题，应像参考图一样展示所有上传报告的大致情况，点击详情再跳转到单报告详情。
-7. 用户反馈 `/quality` 打开很慢，页面长时间停在“正在打开页面 / 正在准备数据和页面内容。”
-8. 当前最后一个明确请求是：把以上对话写入交接文档。
+1. `规则列表` 可视化页面和 `全部规则可视化总览` 重复，占用空间。
+2. 规则详情区域过大，右侧画面显得空。
+3. 生成的交付包里很多文件没用，只需要可直接交付或可继续处理的文件。
 
-### 12.2 当前仓库与分支状态
+### 12.2 已完成规则库调整
 
-当前工作仓库：
+核心文件：
 
 ```text
-D:\Github\clone\tijianbaogao
+store-ai-clinic-web/features/quality/components/quality-shell.tsx
+store-ai-clinic-web/tests/unit/knowledge-page.test.tsx
 ```
+
+当前规则库行为：
+
+- `规则列表` 与 `全部规则可视化总览` 已合并为一个框架。
+- 所有规则按分组展示在 `全部规则可视化总览` 中，框架内滚动，避免越界和重复展示。
+- 规则卡片保留：规则 ID、规则名称、启用/关闭状态、关闭风险程度、严重程度。
+- 点击规则后右侧显示紧凑详情侧栏。
+- 详情侧栏宽度收敛为 420px，并使用 `CompactSummaryBlock`，避免大面积空白。
+- 保留人工添加规则能力：规则 ID、规则名称、失败条件、检测方法、规则是否启用、关闭风险程度。
+
+### 12.3 已完成交付包收口
+
+核心文件：
+
+```text
+store-ai-clinic-web/features/quality/lib/quality-export-config.ts
+store-ai-clinic-web/features/quality/components/report-export-workspace.tsx
+src/store_ai_clinic/services/quality.py
+tests/unit/test_quality_backend.py
+store-ai-clinic-web/tests/unit/quality-shell-interactions.test.tsx
+```
+
+默认交付包现在只包含可用交付项：
+
+```text
+00-交付包说明.html
+01-批次质检总报告.html
+02-逐份报告问题说明/*.html
+批次总体情况表/*.xlsx
+结构化数据/*.xlsx
+合格PDF/（仅当存在无问题 PDF 时生成）
+```
+
+默认交付包不再包含这些过程/内部文件：
+
+```text
+third-batch-report.md
+non-compliant-issues.jsonl
+possible-compliant-issues.jsonl
+needs-review-issues.jsonl
+review-records.jsonl
+rule-hit-stats.json
+evidence-image-index.json
+export-summary.json
+```
+
+兼容行为：如果调用方显式传入 `selected_sections=["export-summary"]`，后端仍可生成 `export-summary.json`，但前端默认 UI 不再选择它。
+
+### 12.4 真实 ZIP 可用性验证
+
+已用测试样本真实调用 `create_export_task()` 生成默认交付包并打开 ZIP 检查。
+
+验证结果：
+
+```text
+artifact_count=6
+required_checks:
+  index_html: OK
+  batch_report_html: OK
+  batch_overview_xlsx: OK
+  structured_data_xlsx: OK
+  issue_detail_html: OK
+useless_found: NONE
+```
+
+测试样本 ZIP 成员：
+
+```text
+00-交付包说明.html
+01-批次质检总报告.html
+02-逐份报告问题说明/02496166_report_问题说明.html
+02-逐份报告问题说明/structured-data_问题说明.html
+批次总体情况表/批次总体情况表.xlsx
+结构化数据/35-44_02496166.xlsx
+```
+
+说明：测试样本没有合格 PDF，所以本次样本 ZIP 没有 `合格PDF/` 目录；真实数据中存在无问题 PDF 时才会生成该目录。
+
+### 12.5 最新验证命令
+
+前端规则库：
+
+```bash
+npm run test -- tests/unit/knowledge-page.test.tsx -- --run
+```
+
+结果：`2 passed`。
+
+前端质量交互：
+
+```bash
+npm run test -- tests/unit/quality-shell-interactions.test.tsx -- --run
+```
+
+结果：`23 passed`。测试期间仍有一个既有 React `act(...)` 警告。
+
+后端质检导出：
+
+```bash
+uv run pytest tests/unit/test_quality_backend.py
+```
+
+结果：`27 passed, 3 warnings`。
+
+导出组件 lint：
+
+```bash
+./node_modules/.bin/eslint.cmd features/quality/components/report-export-workspace.tsx features/quality/lib/quality-export-config.ts --max-warnings=0
+```
+
+结果：通过。
+
+### 12.6 当前已知遗留
+
+`quality-shell.tsx` 整体 lint 仍会被旧问题挡住，非本次规则库合并新增：
+
+- `exportVariant` 未使用。
+- 两处旧的 `react-hooks/set-state-in-effect`。
+- `CleaningResultPanel`、`totalIssues`、`view` 等旧未使用项。
+- 一个既有 `<img>` 性能警告。
+
+本次已清掉新增的 `SummaryBlock` 未使用问题。
+
+### 12.7 Git 接手注意
 
 当前分支：
 
@@ -1407,106 +1527,35 @@ D:\Github\clone\tijianbaogao
 fix/quality-export-delivery-package
 ```
 
-当前分支已和远端对应分支同步。最近一次已推送的关键提交为：
+不要提交以下运行产物或本地数据：
 
 ```text
-b8cf275 Merge live quality scan updates
+data/quality/imports/quality-import-abea8cc450b7/
+质检交付/
+.env
+真实客户数据
 ```
 
-该提交已经把用户本地“实时质检扫描 / 页面随上传数据更新”的改动合并进队友分支 `fix/quality-export-delivery-package`，并成功推送到：
+本次提交应包含规则库、导出配置、导出后端和相关测试/交接文档改动。
+## 13. 2026-07-01 队友同步后的慢加载交接补充
+
+本次同步队友远端分支时，远端 `origin/fix/quality-export-delivery-package` 已更新到新提交；同步过程中保留了本地规则库合并布局、交付包收口改动，也保留队友关于 `/quality` 慢加载的诊断结论。
+
+### 13.1 `/quality` 慢加载诊断
+
+用户反馈 `/quality` 页面长时间停在“正在打开页面 / 正在准备数据和页面内容”。主要原因是首屏仍在服务端等待默认数据集、规则和资产加载，入口文件为：
 
 ```text
-origin/fix/quality-export-delivery-package
+store-ai-clinic-web/app/(workspace)/quality/page.tsx
 ```
 
-合并过程中曾出现代码冲突，但两边功能是互补关系，因此已保留双方能力，没有丢弃队友修改，也没有覆盖用户修改。若后续再出现“同一功能两套交互逻辑”的真正冲突，需要再向用户确认保留哪一个。
+当前阻塞点包括：
 
-### 12.3 最新已验证测试
+- `loadDefaultQualityDataset()` 会扫描默认数据集，真实目录或文件较多时会拖慢首屏。
+- `loadDefaultQualityRules()` 和 `loadDefaultQualityAssets()` 会走后端 API，并使用 `cache: "no-store"` 与超时逻辑。
+- 当前缺少更贴近质检工作台的 `loading.tsx`，用户只能看到通用加载提示。
 
-在完成合并并推送后，已通过以下前端单元测试：
-
-```bash
-npm.cmd test -- --run tests/unit/quality-shell-interactions.test.tsx tests/unit/quality-page.test.tsx tests/unit/tasks-page.test.tsx tests/unit/agent-page.test.tsx tests/unit/inspection-redesign.test.tsx tests/unit/settings-page.test.tsx
-```
-
-结果：
-
-```text
-6 files passed
-34 tests passed
-```
-
-### 12.4 当前工作区注意事项
-
-当前工作区还有未跟踪的运行数据，属于用户真实操作/导入产生的本地数据，不要提交：
-
-```text
-门店数据诊断智能体/data/quality/imports/quality-import-*
-门店数据诊断智能体/data/quality/review-records.jsonl
-```
-
-这些文件目前应继续保持未跟踪状态，除非用户明确要求把某些样例数据纳入仓库。
-
-当前还保留了若干历史 stash，作为安全备份，不要主动删除：
-
-```text
-stash@{0}: On main: codex-local-before-merge-fix-quality-export-2026-07-01
-stash@{1}: On main: codex-temp-before-sync-2026-07-01
-stash@{2}: On main: codex-temp-before-pull-2026-07-01
-stash@{3}: On main: 本地改动：批量检测重设计、store 持久化、客户端组件化
-```
-
-### 12.5 `/quality` 慢加载问题诊断
-
-用户最新反馈是 `/quality` 页面加载很慢，截图中页面卡在：
-
-```text
-正在打开页面
-正在准备数据和页面内容。
-```
-
-已确认主要原因在于 `/quality` 首屏仍被服务端异步数据加载阻塞。当前入口文件为：
-
-```text
-门店数据诊断智能体/store-ai-clinic-web/app/(workspace)/quality/page.tsx
-```
-
-当前逻辑大致是：
-
-```tsx
-import { QualityShell } from "@/features/quality/components/quality-shell";
-import { loadDefaultQualityAssets } from "@/features/quality/lib/default-assets";
-import { loadDefaultQualityDataset } from "@/features/quality/lib/default-dataset";
-import { loadDefaultQualityRules } from "@/features/quality/lib/default-rules";
-
-export default async function QualityPage() {
-  const [dataset, rules, assetSummary] = await Promise.all([
-    loadDefaultQualityDataset(),
-    loadDefaultQualityRules(),
-    loadDefaultQualityAssets(),
-  ]);
-
-  return <QualityShell view="batch" dataset={dataset} rules={rules} assetSummary={assetSummary} liveFromStore />;
-}
-```
-
-慢点包括：
-
-- `loadDefaultQualityDataset()` 会调用默认数据集扫描逻辑，真实目录或文件较多时会阻塞 `/quality` 首屏。
-- `loadDefaultQualityRules()` 和 `loadDefaultQualityAssets()` 会走后端 API，并使用 `cache: "no-store"` 与超时逻辑，仍会增加首屏等待。
-- 当前没有 `app/(workspace)/quality/loading.tsx`，因此用户只能看到通用路由加载提示，感知上更慢。
-
-### 12.6 建议的快速修复方案
-
-优先级最高、风险最低的修复是：让 `/quality` 首屏先渲染轻量客户端壳，不再等待默认数据集、规则和资产扫描。
-
-建议把：
-
-```text
-门店数据诊断智能体/store-ai-clinic-web/app/(workspace)/quality/page.tsx
-```
-
-改成：
+建议后续将 `/quality/page.tsx` 改为先渲染轻量客户端壳：
 
 ```tsx
 import { QualityShell } from "@/features/quality/components/quality-shell";
@@ -1516,17 +1565,9 @@ export default function QualityPage() {
 }
 ```
 
-这样 `/quality` 会立即显示页面；如果 Zustand 全局 store 里已有用户刚上传/刚扫描的数据，`liveFromStore` 会继续接管并展示最新状态。默认数据集扫描可以后续改成客户端后台懒加载或单独 API，不应继续阻塞首屏。
+这样用户刚上传或刚扫描的数据仍可通过 live store 优先展示，默认数据集扫描再改成后台懒加载或单独 API，避免阻塞首屏。
 
-可选增强：
-
-```text
-门店数据诊断智能体/store-ai-clinic-web/app/(workspace)/quality/loading.tsx
-```
-
-新增一个更贴近质检工作台风格的 loading skeleton。注意：仅新增 `loading.tsx` 只能改善等待观感，不能从根上解决服务端扫描阻塞；真正的性能修复仍是移除首屏 await。
-
-### 12.7 建议验证命令
+### 13.2 后续验证建议
 
 完成慢加载修复后，优先运行：
 
@@ -1534,20 +1575,20 @@ export default function QualityPage() {
 npm.cmd test -- --run tests/unit/quality-page.test.tsx tests/unit/quality-shell-interactions.test.tsx tests/unit/static-snapshot-pages-performance.test.tsx
 ```
 
-如果通过，再运行之前合并时用过的相关套件：
+若通过，再运行此前合并时使用过的相关页面套件：
 
 ```bash
 npm.cmd test -- --run tests/unit/quality-shell-interactions.test.tsx tests/unit/quality-page.test.tsx tests/unit/tasks-page.test.tsx tests/unit/agent-page.test.tsx tests/unit/inspection-redesign.test.tsx tests/unit/settings-page.test.tsx
 ```
 
-如测试仍假设 `/quality` 必须在服务端预载默认数据，需要把断言更新为“首屏快速渲染 + live store 数据优先”的产品行为。
+### 13.3 不要提交的本地数据
 
-### 12.8 后续产品待办
+继续不要提交以下运行产物或真实数据：
 
-还有几项用户已经明确提到、但尚未完整落地的产品方向：
-
-1. 报告导出页需要更明确地区分“当前新上传文件的分析报告”和“历史/默认数据集交付包”，避免用户只上传一个 PDF 时看到与当前上传无关的导出项。
-2. 问题清单页应改成批次级概览，不应默认展示右侧证据详情和某一份报告的细节；点击“详情”后再跳转到单报告详情页。
-3. 批量检测页的可视化应继续围绕“所有上传报告的大致情况”更新，包括合规/不合规/待审核占比、文件数、性别比例、年龄段分布、历史检测记录等。
-4. 其他页面需要继续检查是否仍有旧 mock、旧默认数据、旧截图式信息或重复内容导致用户误解当前真实上传状态。
-5. 如后续实现默认数据后台加载，要确保不会覆盖用户刚上传的数据，优先级应为：用户当前上传/扫描结果 > 本地持久化 live store > 默认示例数据。
+```text
+data/quality/imports/quality-import-*
+data/quality/review-records.jsonl
+质检交付/
+.env
+真实客户数据
+```

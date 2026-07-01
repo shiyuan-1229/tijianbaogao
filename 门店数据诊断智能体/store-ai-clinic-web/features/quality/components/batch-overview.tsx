@@ -158,9 +158,6 @@ function buildPageCountDistribution(issues: QualityIssueData[]): { data: ChartDa
   };
 }
 
-function metricValue(metrics: QualityMetric[], label: string) {
-  return Number.parseInt(metrics.find((metric) => metric.label === label)?.value ?? "0", 10) || 0;
-}
 
 function ChartCard({
   title,
@@ -181,30 +178,6 @@ function ChartCard({
     </div>
   );
 }
-
-function StatTile({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number | string;
-  tone: "teal" | "red" | "amber" | "slate";
-}) {
-  const toneClass = {
-    teal: "text-teal-700",
-    red: "text-red-600",
-    amber: "text-amber-600",
-    slate: "text-slate-700",
-  }[tone];
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 shadow-sm">
-      <p className="text-xs font-medium tracking-wide text-slate-400">{label}</p>
-      <p className={`mt-2 text-3xl font-semibold ${toneClass}`}>{value}</p>
-    </div>
-  );
-}
-
 function EchartCanvas({
   option,
   height = 260,
@@ -337,18 +310,13 @@ function CompareBarChart({
   );
 }
 
-export function BatchDetectionOverview({ metrics, issues, assetSummary, importSummary, exportHistory }: OverviewProps) {
+export function BatchDetectionOverview({ issues, assetSummary, exportHistory }: OverviewProps) {
   const assets = assetSummary?.assets ?? [];
   const quality = buildQualityDistribution(assets, issues);
   const ageCoverage = buildAgeCoverage(assets, issues);
   const genderComparison = buildGenderComparison(assets, issues);
   const pageDistribution = buildPageCountDistribution(issues);
 
-  const totalFiles = importSummary?.total_files ?? assetSummary?.totalPdfFiles ?? metricValue(metrics, "PDF");
-  const totalArchives = assetSummary?.totalArchives ?? uniqueArchives(assets, issues).length;
-  const totalIssues = issues.length;
-  const pendingIssues = issues.filter((issue) => issue.status === "needs_review").length;
-  const highIssues = issues.filter((issue) => issue.severity === "high").length;
 
   return (
     <section aria-label="检测总览" className="space-y-4">
@@ -357,12 +325,6 @@ export function BatchDetectionOverview({ metrics, issues, assetSummary, importSu
         <p className="mt-1 text-sm text-teal-700/80">围绕质量分级、年龄覆盖、性别结构和页数分布看这一轮检测结果。</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatTile label="总文件数" value={totalFiles} tone="slate" />
-        <StatTile label="总档案数" value={totalArchives} tone="teal" />
-        <StatTile label="发现问题" value={totalIssues} tone="amber" />
-        <StatTile label="高严重度 / 待复核" value={`${highIssues} / ${pendingIssues}`} tone={highIssues > 0 ? "red" : "teal"} />
-      </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <PieChart title="体检数据质量分布" subtitle="合格 / 不合格 / 警告会随本轮扫描结果自动更新" data={quality} />

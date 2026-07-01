@@ -39,6 +39,7 @@ type IssueSeverity = "high" | "medium" | "low";
 type ReviewStatus = "needs_review" | "ai_reviewing" | "disputed" | "confirmed" | "rejected";
 type ReviewDecision = "confirmed" | "rejected" | "disputed";
 type SeverityFilter = "all" | IssueSeverity;
+type RuleEnabledState = "enabled" | "disabled";
 type StatusFilter = "all" | ReviewStatus;
 type EvidenceBox = [number, number, number, number];
 type FindingType = "data_error" | "missing_text" | "privacy_leak" | "history_gap" | "format" | "other";
@@ -65,6 +66,8 @@ export type QualityRuleData = {
   severity: IssueSeverity;
   detectMethod: string;
   needHumanReview: boolean;
+  enabled?: boolean;
+  disabledRisk?: IssueSeverity;
 };
 
 export type QualityAssetRecord = {
@@ -291,32 +294,24 @@ const fallbackIssues: QualityIssue[] = [
 ];
 
 const prototypeRules: QualityRuleData[] = [
-  {
-    ruleId: "R-FILE-001",
-    ruleName: "文件完整性检查",
-    source: "agent.md 第一阶段边界",
-    dimension: "文件盘点",
-    checkTarget: "PDF + 结构化数据",
-    passCondition: "PDF 与 Excel 对应完整，档案访问次数达标。",
-    failCondition: "缺 PDF、缺 Excel 或访问记录不足。",
-    severity: "high",
-    detectMethod: "PDF + 结构化数据",
-    needHumanReview: true,
-  },
-  {
-    ruleId: "R-PRIVACY-003",
-    ruleName: "敏感身份信息脱敏",
-    source: "历史评估结论",
-    dimension: "脱敏风险",
-    checkTarget: "PDF 页面",
-    passCondition: "不出现完整敏感信息。",
-    failCondition: "身份证号、手机号、姓名等完整展示。",
-    severity: "high",
-    detectMethod: "PDF 转图 + OCR/视觉框选",
-    needHumanReview: true,
-  },
+  { ruleId: "H1", ruleName: "内科检查缺失", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "PDF 报告 / OCR 文本", passCondition: "报告中包含可读、可定位的内科检查内容。", failCondition: "缺少内科检查模块，或模块不可读、无法回到页面证据。", severity: "high", detectMethod: "PDF 转图 + OCR/视觉识别 + 人工复核", needHumanReview: true },
+  { ruleId: "H2", ruleName: "外科检查缺失", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "PDF 报告 / OCR 文本", passCondition: "报告中包含可读、可定位的外科检查内容。", failCondition: "缺少外科检查模块，或模块不可读、无法回到页面证据。", severity: "high", detectMethod: "PDF 转图 + OCR/视觉识别 + 人工复核", needHumanReview: true },
+  { ruleId: "H3", ruleName: "影像检查缺失（彩超/胸片）", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "影像检查报告页", passCondition: "报告包含彩超、胸片或其他影像检查内容及结论。", failCondition: "缺少影像检查内容，或报告提到影像但页面中找不到对应证据。", severity: "high", detectMethod: "PDF 页面视觉识别 + 检查模块匹配", needHumanReview: true },
+  { ruleId: "H4", ruleName: "基础检验缺失（血常规）", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "检验项目 / Excel 指标", passCondition: "报告或结构化数据中包含血常规等基础检验项目。", failCondition: "基础检验项目缺失，或 Excel 与 PDF 无法互相印证。", severity: "high", detectMethod: "Excel 字段统计 + PDF 检验模块识别", needHumanReview: true },
+  { ruleId: "H5", ruleName: "超过5年时效期", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "检查日期 / 历史记录", passCondition: "检查日期落在客户要求的 5 年时效窗口内。", failCondition: "检查日期缺失、冲突，或超过 5 年时效期。", severity: "high", detectMethod: "Excel CheckDate 解析 + PDF 日期视觉复核", needHumanReview: true },
+  { ruleId: "H6", ruleName: "检查项目过于单一", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "检查项目结构", passCondition: "检查项目覆盖主要体检模块，项目种类足够支撑评估。", failCondition: "检查项目明显过少或集中在单一模块，无法满足样本质量要求。", severity: "high", detectMethod: "ItemGroupName 统计 + PDF 模块覆盖检查", needHumanReview: true },
+  { ruleId: "H7", ruleName: "文本完整性（缺字/截断）", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "PDF 页面文字", passCondition: "关键文字完整、连续、可读。", failCondition: "出现缺字、截断、遮挡、错位或无法解释的文本断裂。", severity: "high", detectMethod: "OCR 覆盖率 + 视觉模型可读性检查", needHumanReview: true },
+  { ruleId: "H8", ruleName: "影像图/诊断完整性", source: "三级检测标准，硬性 H1-H8", dimension: "硬性 H1-H8", checkTarget: "影像图与诊断结论", passCondition: "影像图、检查描述和诊断结论互相对应。", failCondition: "影像图缺失、诊断结论缺失，或图文无法对应。", severity: "high", detectMethod: "页面图像区域识别 + 诊断文本匹配", needHumanReview: true },
+  { ruleId: "Q1", ruleName: "隐私信息未脱敏", source: "三级检测标准，质量 Q1-Q5", dimension: "质量 Q1-Q5", checkTarget: "PDF 页面 / OCR 文本", passCondition: "姓名、身份证、手机号、单位等敏感信息已隐藏或不可识别。", failCondition: "报告中出现完整或可组合识别的隐私信息。", severity: "high", detectMethod: "OCR 敏感词识别 + 视觉模型定位 + 人工确认", needHumanReview: true },
+  { ruleId: "Q2", ruleName: "单位字段缺失或不完整", source: "三级检测标准，质量 Q1-Q5", dimension: "质量 Q1-Q5", checkTarget: "单位字段 / 报告页眉页脚", passCondition: "单位字段存在且格式完整，必要时已按要求脱敏。", failCondition: "单位字段缺失、截断、不完整或与结构化数据冲突。", severity: "medium", detectMethod: "OCR 字段抽取 + Excel 字段比对", needHumanReview: true },
+  { ruleId: "Q3", ruleName: "异常值未标注或标注不规范", source: "三级检测标准，质量 Q1-Q5", dimension: "质量 Q1-Q5", checkTarget: "异常指标 / Symbol 标记", passCondition: "异常值有明确标注，并能与参考范围或医生说明对应。", failCondition: "异常值未标注、标注不规范，或 PDF 与 Excel 异常标记不一致。", severity: "medium", detectMethod: "Excel Symbol / ItemResultChar 解析 + PDF 标注复核", needHumanReview: true },
+  { ruleId: "Q4", ruleName: "缺少体检总结/结论", source: "三级检测标准，质量 Q1-Q5", dimension: "质量 Q1-Q5", checkTarget: "体检总结 / 结论区", passCondition: "报告包含可读的体检总结、建议或结论区。", failCondition: "缺少体检总结或结论，或总结区裁切、不可读。", severity: "medium", detectMethod: "PDF 视觉识别 + OCR 标题/结论关键词匹配", needHumanReview: true },
+  { ruleId: "Q5", ruleName: "日期信息不一致", source: "三级检测标准，质量 Q1-Q5", dimension: "质量 Q1-Q5", checkTarget: "报告日期 / Excel CheckDate", passCondition: "PDF 报告日期、结构化数据日期和历史记录时间线一致。", failCondition: "日期缺失、互相矛盾，或同一档案内时间线无法解释。", severity: "medium", detectMethod: "日期字段解析 + PDF 日期 OCR + 历史记录排序", needHumanReview: true },
+  { ruleId: "R1", ruleName: "报告页数充足度", source: "三级检测标准，参考 R1-R4", dimension: "参考 R1-R4", checkTarget: "PDF 页数", passCondition: "页数满足该类报告的合理范围，并能覆盖必要模块。", failCondition: "页数明显偏少，疑似缺页或内容不完整。", severity: "low", detectMethod: "PDF 页数统计 + 页面预览抽检", needHumanReview: true },
+  { ruleId: "R2", ruleName: "异常项目数量分布统计", source: "三级检测标准，参考 R1-R4", dimension: "参考 R1-R4", checkTarget: "异常项目数量", passCondition: "异常项目数量分布合理，并可从结构化数据追溯。", failCondition: "异常项目数量异常偏低、偏高，或无法从 Excel/PDF 互相验证。", severity: "low", detectMethod: "Excel 异常项统计 + 批次分布对比", needHumanReview: true },
+  { ruleId: "R3", ruleName: "特殊检查覆盖率（肿瘤/基因）", source: "三级检测标准，参考 R1-R4", dimension: "参考 R1-R4", checkTarget: "特殊检查项目", passCondition: "特殊检查项目覆盖符合样本要求，并有清晰证据。", failCondition: "肿瘤标志物、基因检查等特殊项目缺失或覆盖不足。", severity: "low", detectMethod: "项目名称词表匹配 + PDF 模块复核", needHumanReview: true },
+  { ruleId: "R4", ruleName: "历史对比数据可用性", source: "三级检测标准，参考 R1-R4", dimension: "参考 R1-R4", checkTarget: "历史报告 / 历史指标", passCondition: "历史对比数据可用，且同一档案号能串联多次记录。", failCondition: "缺少历史对比数据，或历史记录不可追溯、不可使用。", severity: "low", detectMethod: "档案号分组 + 历史报告匹配 + 指标趋势检查", needHumanReview: true },
 ];
-
 const fallbackExportSummary: QualityExportSummary = {
   datasetPath: "D:/桌面/数据/5人",
   generatedAt: "2026-06-26T12:00:00.000Z",
@@ -1164,7 +1159,7 @@ export function QualityShell({
             <ReportEvidenceWorkspace selectedIssue={selectedIssue} activePage={activePreviewPage} onSelectPage={setActivePreviewPage} />
           ) : null}
           {view === "review" ? <ReviewQueuePanel issues={allIssues} selectedIssue={selectedIssue} onSelectIssue={handleSelectIssue} /> : null}
-          {view === "rules" ? <RulesPanel ruleSet={ruleSet} /> : null}
+          {view === "rules" ? <RulesPanel key={`${ruleSet.sourceDocument ?? "default"}-${ruleSet.rules.map((rule) => rule.ruleId).join("|")}`} ruleSet={ruleSet} /> : null}
 
           {view !== "batch" && view !== "rules" && view !== "review" ? (
             <IssuePanel
@@ -2500,21 +2495,257 @@ function RuleDetailCard({ title, children }: { title: string; children: ReactNod
   );
 }
 function RulesPanel({ ruleSet }: { ruleSet: QualityRuleSet }) {
+  const [localRules, setLocalRules] = useState<QualityRuleData[]>(() => ruleSet.rules.map(withRuleDefaults));
   const [selectedRuleId, setSelectedRuleId] = useState(ruleSet.rules[0]?.ruleId ?? "");
-  const selectedRule = ruleSet.rules.find((rule) => rule.ruleId === selectedRuleId) ?? ruleSet.rules[0];
-  const sourceLabel = ruleSet.sourceDocument ? ruleSet.sourceDocument.split(/[\\/]/).filter(Boolean).at(-1) : "";
+  const [isAddingRule, setIsAddingRule] = useState(false);
+  const [draftRule, setDraftRule] = useState({
+    ruleId: "",
+    ruleName: "",
+    failCondition: "",
+    detectMethod: "",
+    severity: "medium" as IssueSeverity,
+    enabledState: "enabled" as RuleEnabledState,
+    disabledRisk: "medium" as IssueSeverity,
+  });
+  const [message, setMessage] = useState("");
+
+  const selectedRule = localRules.find((rule) => rule.ruleId === selectedRuleId) ?? localRules[0];
+  const sourceLabel = ruleSet.sourceDocument ? ruleSet.sourceDocument.split(/[\\/]/).filter(Boolean).at(-1) : "三级检测标准";
+  const standardDimensions = ["硬性 H1-H8", "质量 Q1-Q5", "参考 R1-R4", "人工补充"];
+  const ruleDimensions = Array.from(new Set(localRules.map((rule) => rule.dimension)));
+  const groupedRules = [...standardDimensions, ...ruleDimensions.filter((dimension) => !standardDimensions.includes(dimension))]
+    .map((dimension) => ({
+      dimension,
+      rules: localRules.filter((rule) => rule.dimension === dimension),
+    }))
+    .filter((group) => group.rules.length > 0);
+  const standardRuleCount = localRules.filter((rule) => standardDimensions.includes(rule.dimension) && rule.dimension !== "人工补充").length;
+
+  function updateDraft(field: keyof typeof draftRule, value: string) {
+    setDraftRule((current) => ({
+      ...current,
+      [field]: field === "severity" || field === "disabledRisk" ? (value as IssueSeverity) : value,
+    }));
+  }
+
+  function toggleRuleEnabled(ruleId: string) {
+    setLocalRules((current) => current.map((rule) => (rule.ruleId === ruleId ? { ...rule, enabled: !isRuleEnabled(rule) } : rule)));
+  }
+
+  function addDraftRule() {
+    const ruleId = draftRule.ruleId.trim();
+    const ruleName = draftRule.ruleName.trim();
+    const failCondition = draftRule.failCondition.trim();
+    const detectMethod = draftRule.detectMethod.trim() || "人工复核问题证据后补充检测方式。";
+    if (!ruleId || !ruleName || !failCondition) {
+      setMessage("请填写规则 ID、规则名称和失败条件。");
+      return;
+    }
+
+    const nextRule: QualityRuleData = {
+      ruleId,
+      ruleName,
+      source: "人工添加：问题复核",
+      dimension: "人工补充",
+      checkTarget: "人工判断的问题模式",
+      passCondition: "人工确认该问题模式未触发时视为通过。",
+      failCondition,
+      severity: draftRule.severity,
+      detectMethod,
+      needHumanReview: true,
+      enabled: draftRule.enabledState === "enabled",
+      disabledRisk: draftRule.disabledRisk,
+    };
+
+    setLocalRules((current) => {
+      const withoutDuplicate = current.filter((rule) => rule.ruleId !== ruleId);
+      return [...withoutDuplicate, withRuleDefaults(nextRule)];
+    });
+    setSelectedRuleId(ruleId);
+    setDraftRule({ ruleId: "", ruleName: "", failCondition: "", detectMethod: "", severity: "medium", enabledState: "enabled", disabledRisk: "medium" });
+    setIsAddingRule(false);
+    setMessage(`已添加规则 ${ruleId}，待人工确认后纳入检测标准。`);
+  }
+
   return (
     <section className="rounded-lg border border-[#dfe4ea] bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold text-[#151922]">规则列表</h2><p className="mt-1 text-sm text-[#5e6978]">当前问题清单使用的检测规则摘要。</p>{sourceLabel ? <p className="mt-1 text-xs font-semibold text-[#0b8b8b]">规则来源：{sourceLabel}</p> : null}</div><div className="rounded-md bg-[#f8fafc] px-3 py-2 text-sm text-[#5e6978]">共 {ruleSet.rules.length} 条规则</div></div>
-      <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]"><div className="space-y-3">{ruleSet.rules.map((rule) => <button key={rule.ruleId} type="button" onClick={() => setSelectedRuleId(rule.ruleId)} className={rule.ruleId === selectedRule?.ruleId ? "w-full rounded-lg border border-[#0b9a9a] bg-[#f3fbfb] p-4 text-left" : "w-full rounded-lg border border-[#eef2f6] bg-white p-4 text-left"}><div className="text-sm font-semibold text-[#202733]">{rule.ruleId}</div></button>)}</div>{selectedRule ? <div className="rounded-lg border border-[#eef2f6] bg-[#f8fafc] p-4"><h3 className="text-sm font-semibold text-[#151922]">规则详情</h3><div className="mt-3 space-y-3 text-sm text-[#475467]"><SummaryBlock label="规则名称" value={selectedRule.ruleName} /><SummaryBlock label="检测方式" value={selectedRule.detectMethod} /><SummaryBlock label="人工复核" value={selectedRule.needHumanReview ? "需要人工复核" : "无需人工复核"} /></div></div> : null}</div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-[#151922]">规则列表</h2>
+          <p className="mt-1 text-sm text-[#5e6978]">全部规则集中在一个可视化框架内，左侧点选后在右侧查看紧凑详情。</p>
+          {sourceLabel ? <p className="mt-1 text-xs font-semibold text-[#0b8b8b]">规则来源：{sourceLabel}</p> : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="rounded-md bg-[#f8fafc] px-3 py-2 text-sm text-[#5e6978]">共 {localRules.length} 条规则</div>
+          <button type="button" onClick={() => setIsAddingRule((current) => !current)} className="h-9 rounded-md bg-[#0b9a9a] px-3 text-sm font-semibold text-white hover:bg-[#087f7f]">
+            添加规则
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="space-y-3">
+          <div className="rounded-lg border border-[#dfe4ea] bg-[#f8fafc] p-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-[#151922]">全部规则可视化总览</h3>
+                <p className="mt-1 text-xs text-[#667085]">按规则分组展示，内容过多时只在框架内滚动。</p>
+              </div>
+              <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-[#5e6978]">{standardRuleCount === 17 ? "内置 17 条规则" : `当前 ${localRules.length} 条规则`}</span>
+            </div>
+            <div aria-label="全部规则可视化总览" className="max-h-[620px] overflow-y-auto rounded-md border border-[#dfe4ea] bg-white p-2">
+              <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+                {groupedRules.map((group) => (
+                  <div key={group.dimension} className="min-w-0 rounded-md border border-[#eef2f6] bg-white p-2">
+                    <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                      <h4 className="truncate text-xs font-semibold text-[#16324f]">{group.dimension}</h4>
+                      <span className="shrink-0 text-xs text-[#667085]">{group.rules.length} 条</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {group.rules.map((rule) => {
+                        const enabled = isRuleEnabled(rule);
+                        const risk = getDisabledRisk(rule);
+                        return (
+                          <div key={rule.ruleId} className={rule.ruleId === selectedRule?.ruleId ? "rounded-md border border-[#8bdede] bg-[#ecfeff] p-2" : "rounded-md border border-transparent p-2 hover:border-[#d9e0e8] hover:bg-[#f7f9fb]"}>
+                            <button type="button" aria-label={`查看规则 ${rule.ruleId}`} onClick={() => setSelectedRuleId(rule.ruleId)} className="grid w-full grid-cols-[54px_minmax(0,1fr)] items-start gap-2 text-left">
+                              <span className="break-words text-xs font-semibold leading-4 text-[#0b8b8b]">{rule.ruleId}</span>
+                              <span className="min-w-0 break-words text-xs font-semibold leading-5 text-[#151922]">{rule.ruleName}</span>
+                            </button>
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-[62px]">
+                              <button type="button" aria-pressed={enabled} aria-label={`规则 ${rule.ruleId} ${ruleEnabledLabel(rule)}`} onClick={() => toggleRuleEnabled(rule.ruleId)} className={enabled ? "h-6 rounded-md border border-[#99f6e4] bg-[#ecfeff] px-2 text-xs font-semibold text-[#0f766e]" : "h-6 rounded-md border border-[#fecdd3] bg-[#fff1f2] px-2 text-xs font-semibold text-[#be123c]"}>
+                                {ruleEnabledLabel(rule)}
+                              </button>
+                              <span className={`inline-flex h-6 items-center rounded-md border px-2 text-xs font-semibold ${riskToneClass(risk)}`}>关闭风险：{severityLabel(risk)}</span>
+                              <span className="inline-flex h-6 items-center rounded-md border border-[#dfe4ea] bg-white px-2 text-xs font-semibold text-[#5e6978]">严重：{severityLabel(rule.severity)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {isAddingRule ? (
+            <div className="rounded-lg border border-[#8bdede] bg-[#f3fbfb] p-3">
+              <h3 className="text-sm font-semibold text-[#151922]">人工添加规则</h3>
+              <p className="mt-1 text-xs text-[#486179]">遇到新问题时，先由人工判断是否需要沉淀为规则。</p>
+              <div className="mt-3 grid gap-2">
+                <label className="grid gap-1 text-xs font-medium text-[#344054]">
+                  规则 ID
+                  <input value={draftRule.ruleId} onChange={(event) => updateDraft("ruleId", event.target.value)} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-3 text-sm outline-none focus:border-[#0b9a9a]" placeholder="例如 M1" />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-[#344054]">
+                  规则名称
+                  <input value={draftRule.ruleName} onChange={(event) => updateDraft("ruleName", event.target.value)} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-3 text-sm outline-none focus:border-[#0b9a9a]" placeholder="描述问题模式" />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-[#344054]">
+                  失败条件
+                  <textarea value={draftRule.failCondition} onChange={(event) => updateDraft("failCondition", event.target.value)} className="min-h-[72px] rounded-md border border-[#cfd8e3] bg-white px-3 py-2 text-sm outline-none focus:border-[#0b9a9a]" placeholder="什么情况下判定为问题" />
+                </label>
+                <label className="grid gap-1 text-xs font-medium text-[#344054]">
+                  检测方法
+                  <textarea value={draftRule.detectMethod} onChange={(event) => updateDraft("detectMethod", event.target.value)} className="min-h-[72px] rounded-md border border-[#cfd8e3] bg-white px-3 py-2 text-sm outline-none focus:border-[#0b9a9a]" placeholder="人工或系统如何判断" />
+                </label>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <label className="grid gap-1 text-xs font-medium text-[#344054]">
+                    严重程度
+                    <select value={draftRule.severity} onChange={(event) => updateDraft("severity", event.target.value)} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-3 text-sm outline-none focus:border-[#0b9a9a]">
+                      <option value="high">高</option>
+                      <option value="medium">中</option>
+                      <option value="low">低</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-medium text-[#344054]">
+                    规则是否启用
+                    <select value={draftRule.enabledState} onChange={(event) => updateDraft("enabledState", event.target.value)} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-3 text-sm outline-none focus:border-[#0b9a9a]">
+                      <option value="enabled">启用</option>
+                      <option value="disabled">关闭</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-medium text-[#344054]">
+                    关闭风险程度
+                    <select value={draftRule.disabledRisk} onChange={(event) => updateDraft("disabledRisk", event.target.value)} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-3 text-sm outline-none focus:border-[#0b9a9a]">
+                      <option value="high">高</option>
+                      <option value="medium">中</option>
+                      <option value="low">低</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="mt-3 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsAddingRule(false)} className="h-8 rounded-md border border-[#cfd8e3] bg-white px-3 text-xs font-semibold text-[#344054] hover:bg-[#f7f9fb]">取消</button>
+                <button type="button" onClick={addDraftRule} className="h-8 rounded-md bg-[#0b9a9a] px-3 text-xs font-semibold text-white hover:bg-[#087f7f]">确认添加规则</button>
+              </div>
+            </div>
+          ) : null}
+
+          {message ? <div role="status" className="rounded-md border border-[#99f6e4] bg-[#ecfeff] px-3 py-2 text-xs font-semibold text-[#0f766e]">{message}</div> : null}
+        </div>
+
+        {selectedRule ? (
+          <aside aria-label="规则详情" className="self-start rounded-lg border border-[#dfe4ea] bg-[#f8fafc] p-3 xl:sticky xl:top-4">
+            <div className="flex items-start justify-between gap-3 border-b border-[#e6ebf1] pb-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-[#151922]">规则详情</h3>
+                <p className="mt-1 break-words text-xs text-[#667085]">{selectedRule.ruleId}</p>
+              </div>
+              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                <span className={isRuleEnabled(selectedRule) ? "inline-flex rounded border border-[#99f6e4] bg-[#ecfeff] px-2 py-1 text-xs font-semibold text-[#0f766e]" : "inline-flex rounded border border-[#fecdd3] bg-[#fff1f2] px-2 py-1 text-xs font-semibold text-[#be123c]"}>{ruleEnabledLabel(selectedRule)}</span>
+                <span className={`inline-flex rounded border px-2 py-1 text-xs font-semibold ${riskToneClass(getDisabledRisk(selectedRule))}`}>关闭风险：{severityLabel(getDisabledRisk(selectedRule))}</span>
+              </div>
+            </div>
+            <div className="mt-3 space-y-2 text-sm text-[#475467]">
+              <CompactSummaryBlock label="规则名称" value={selectedRule.ruleName} />
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                <CompactSummaryBlock label="规则分组" value={selectedRule.dimension} />
+                <CompactSummaryBlock label="严重程度" value={severityLabel(selectedRule.severity)} />
+              </div>
+              <CompactSummaryBlock label="检查对象" value={selectedRule.checkTarget} />
+              <CompactSummaryBlock label="失败条件" value={selectedRule.failCondition} />
+              <CompactSummaryBlock label="检测方式" value={selectedRule.detectMethod} />
+              <CompactSummaryBlock label="人工复核" value={selectedRule.needHumanReview ? "需要人工复核" : "无需人工复核"} />
+            </div>
+          </aside>
+        ) : null}
+      </div>
     </section>
   );
 }
-
-function SummaryBlock({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-lg border border-[#eef2f6] p-4"><div className="text-xs font-medium text-[#7b8794]">{label}</div><p className="mt-2 text-sm text-[#202733]">{value}</p></div>;
+function withRuleDefaults(rule: QualityRuleData): QualityRuleData {
+  return { ...rule, enabled: isRuleEnabled(rule), disabledRisk: getDisabledRisk(rule) };
 }
 
+function isRuleEnabled(rule: QualityRuleData) {
+  return rule.enabled ?? true;
+}
+
+function getDisabledRisk(rule: QualityRuleData) {
+  return rule.disabledRisk ?? rule.severity;
+}
+
+function ruleEnabledLabel(rule: QualityRuleData) {
+  return isRuleEnabled(rule) ? "已启用" : "已关闭";
+}
+
+function severityLabel(severity: IssueSeverity) {
+  return severity === "high" ? "高" : severity === "medium" ? "中" : "低";
+}
+
+function riskToneClass(severity: IssueSeverity) {
+  if (severity === "high") {
+    return "border-[#fecdd3] bg-[#fff1f2] text-[#be123c]";
+  }
+  if (severity === "medium") {
+    return "border-[#fde68a] bg-[#fffbeb] text-[#92400e]";
+  }
+  return "border-[#bbf7d0] bg-[#ecfdf3] text-[#15803d]";
+}
+function CompactSummaryBlock({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-md border border-[#e6ebf1] bg-white px-3 py-2"><div className="text-xs font-medium text-[#7b8794]">{label}</div><p className="mt-1 break-words text-sm leading-5 text-[#202733]">{value}</p></div>;
+}
 function SeverityBadge({ severity }: { severity: IssueSeverity }) {
   const label = severity === "high" ? "高" : severity === "medium" ? "中" : "低";
   const className = severity === "high" ? "bg-[#fff1f2] text-[#dc2626] border-[#fecdd3]" : severity === "medium" ? "bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]" : "bg-[#ecfdf3] text-[#15803d] border-[#bbf7d0]";

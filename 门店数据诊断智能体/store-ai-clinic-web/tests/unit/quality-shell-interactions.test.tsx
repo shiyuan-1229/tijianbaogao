@@ -80,7 +80,7 @@ describe("quality workspace interactions", () => {
     expect(screen.getByLabelText("质检指标")).toBeInTheDocument();
     expect(screen.queryByText("高优先级问题")).not.toBeInTheDocument();
   });
-  it("renders the real asset inventory summary in batch view", () => {
+  it("omits compact stat tiles from the batch overview", () => {
     render(
       <QualityShell
         view="batch"
@@ -101,10 +101,13 @@ describe("quality workspace interactions", () => {
       />,
     );
 
-    expect(screen.getByText("总文件数")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("检测总览")).getByText("31")).toBeInTheDocument();
-    expect(screen.getByText("总档案数")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("数据资产盘点")).getByText(/共 12 份档案/)).toBeInTheDocument();
+    const overview = screen.getByLabelText("检测总览");
+
+    expect(within(overview).queryByText("总文件数")).not.toBeInTheDocument();
+    expect(within(overview).queryByText("总档案数")).not.toBeInTheDocument();
+    expect(within(overview).queryByText("发现问题")).not.toBeInTheDocument();
+    expect(within(overview).queryByText("高严重度 / 待复核")).not.toBeInTheDocument();
+    expect(within(overview).getByText("体检数据质量分布")).toBeInTheDocument();
   });
   it("shows detection flow after the import cleaning panel", () => {
     render(
@@ -319,8 +322,8 @@ describe("quality workspace interactions", () => {
     );
 
     expect(screen.getByText("规则来源：体检报告需求.docx")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /R-REQ-008/ }));
-    expect(screen.getByText("体检总结完整性")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看规则 R-REQ-008" }));
+    expect(screen.getAllByText("体检总结完整性").length).toBeGreaterThan(0);
     expect(screen.getByText("PDF 页面视觉识别 + OCR/人工复核")).toBeInTheDocument();
     expect(screen.getByText("需要人工复核")).toBeInTheDocument();
   });
@@ -339,12 +342,10 @@ describe("quality workspace interactions", () => {
           reviewRecordCount: 2,
           evidenceImageCount: 4,
           sections: [
-            { key: "third-batch-report", title: "第三批数据检测报告", itemCount: 1, description: "覆盖 1 个年龄段、1 份档案、3 个问题。" },
-            { key: "non-compliant", title: "不合规问题清单", itemCount: 1, description: "人工已确认的问题。" },
-            { key: "possible-compliant", title: "可能合规清单", itemCount: 1, description: "人工已驳回的问题。" },
-            { key: "needs-review", title: "需人工复核清单", itemCount: 1, description: "仍待人工确认的问题。" },
-            { key: "review-records", title: "人工复核记录", itemCount: 2, description: "真实复核记录。" },
-            { key: "rule-hit-stats", title: "规则命中统计", itemCount: 3, description: "命中 3 条规则。" },
+            { key: "batch-overview-table", title: "批次总体情况表", itemCount: 1, description: "按档案汇总合规状态、问题数量和文件完整性。" },
+            { key: "structured-data", title: "结构化数据导出", itemCount: 1, description: "按档案导出结构化 Excel。" },
+            { key: "compliant-pdfs", title: "合格 PDF 文件夹", itemCount: 1, description: "合格 PDF 文件。" },
+            { key: "issue-detail-reports", title: "逐份问题说明", itemCount: 2, description: "逐份 HTML 问题说明。" },
           ],
           ruleHits: [
             { ruleId: "R-EXCEL-001", ruleName: "字段缺失", hitCount: 1 },
@@ -359,8 +360,9 @@ describe("quality workspace interactions", () => {
     expect(screen.getByText("总问题")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("交付物选择")).toBeInTheDocument();
-    expect(screen.getAllByText("第三批数据检测报告").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("覆盖 1 个年龄段、1 份档案、3 个问题。")).toBeInTheDocument();
+    expect(screen.getAllByText("客户阅读版报告").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("批次总体情况表").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("只整理客户可读、可继续处理的交付文件，避免把过程数据和技术索引打进 ZIP 包。")).toBeInTheDocument();
   });
   it("makes rule library cards and export workspace interactive", async () => {
     const user = userEvent.setup();
@@ -390,9 +392,9 @@ describe("quality workspace interactions", () => {
     );
 
     const { rerender } = render(<QualityShell view="rules" dataset={dataset} />);
-    await user.click(screen.getByRole("button", { name: /R-FILE-001/ }));
+    await user.click(screen.getByRole("button", { name: "查看规则 H1" }));
     expect(screen.getByText("\u89c4\u5219\u8be6\u60c5")).toBeInTheDocument();
-    expect(screen.getByText(/PDF \+ \u7ed3\u6784\u5316\u6570\u636e/u)).toBeInTheDocument();
+    expect(screen.getByText(/PDF 报告 \/ OCR 文本/u)).toBeInTheDocument();
 
     rerender(<QualityShell view="export" dataset={dataset} />);
     expect(screen.getByLabelText("报告导出工作台")).toBeInTheDocument();
@@ -413,12 +415,12 @@ describe("quality workspace interactions", () => {
           export_type: "第三批数据检测报告",
           dataset_path: dataset.datasetPath,
           status: "done",
-          message: "已生成交付包：quality-export-export-abc123.zip，包含 8 个文件。",
+          message: "已生成交付包：quality-export-export-abc123.zip，包含 5 个可用文件。",
           created_at: "2026-06-30T12:00:00+08:00",
           bundle_name: "quality-export-export-abc123.zip",
           bundle_path: "D:/tmp/quality-export-export-abc123.zip",
           download_url: "/api/quality/exports/export-abc123/download",
-          artifact_count: 8,
+          artifact_count: 5,
         }),
         {
           status: 200,
@@ -432,11 +434,12 @@ describe("quality workspace interactions", () => {
     render(<QualityShell view="export" dataset={dataset} />);
 
     expect(screen.getByLabelText("报告导出工作台")).toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "证据截图索引" }));
-    expect(screen.getByText("已选 8 / 9 项")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "证据截图索引" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "人工复核记录" })).not.toBeInTheDocument();
+    expect(screen.getByText("已选 5 / 5 项")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "生成交付包" }));
 
-    expect(await screen.findByText("已生成交付包：quality-export-export-abc123.zip，包含 8 个文件。")).toBeInTheDocument();
+    expect(await screen.findByText("已生成交付包：quality-export-export-abc123.zip，包含 5 个可用文件。")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "下载最近交付包" })).toHaveAttribute("href", "/api/quality/exports/export-abc123/download");
     expect(exportFetch).toHaveBeenCalledWith(
       "/api/quality/exports",
@@ -446,6 +449,17 @@ describe("quality workspace interactions", () => {
         body: expect.stringContaining('"selected_sections"'),
       }),
     );
+    const [, requestInit] = exportFetch.mock.calls.find(([url, init]) => url === "/api/quality/exports" && (init as RequestInit | undefined)?.method === "POST") ?? [];
+    const requestBody = JSON.parse(String(requestInit?.body));
+    expect(requestBody.selected_sections).toEqual([
+      "batch-overview-table",
+      "structured-data",
+      "compliant-pdfs",
+      "issue-detail-reports",
+    ]);
+    expect(JSON.stringify(requestBody.selected_sections)).not.toContain("export-summary");
+    expect(JSON.stringify(requestBody.selected_sections)).not.toContain("evidence-image-index");
+    expect(JSON.stringify(requestBody.selected_sections)).not.toContain("review-records");
   });
   it("keeps long evidence text out of the report preview", () => {
     render(<QualityShell view="detail" dataset={dataset} />);
@@ -1124,26 +1138,3 @@ describe("quality workspace interactions", () => {
     expect(within(evidencePanel).queryByText("XX体检中心检验报告单")).not.toBeInTheDocument();
   });
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

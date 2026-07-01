@@ -637,12 +637,6 @@ def create_export_task(
         artifact_count += _export_compliant_pdfs(_export_section_dir(export_dir, "compliant-pdfs"), root, issues, review_status_by_issue)
     if "issue-detail-reports" in section_keys:
         detail_statuses = {"confirmed", "needs_review", "ai_reviewing", "disputed"}
-        artifact_count += _export_issue_detail_reports(
-            _export_section_dir(export_dir, "issue-detail-reports"),
-            issues,
-            review_status_by_issue,
-            include_statuses=detail_statuses,
-        )
         artifact_count += _export_customer_issue_detail_html(
             export_dir / "02-逐份报告问题说明",
             issues,
@@ -662,7 +656,7 @@ def create_export_task(
         export_type=export_type.strip(),
         dataset_path=str(root),
         status="done",
-        message=f"已生成交付包：{bundle_name}，包含 {artifact_count} 个文件。文件夹：{export_dir}",
+        message=f"已生成交付包：{bundle_name}，包含 {artifact_count} 个可用文件。文件夹：{export_dir}",
         created_at=timestamp.isoformat(),
         bundle_name=bundle_name,
         bundle_path=str(bundle_path),
@@ -823,14 +817,10 @@ EXPORT_SECTION_ALIASES: dict[str, list[str]] = {
 }
 
 DEFAULT_EXPORT_SECTION_KEYS = {
-    "third-batch-report",
-    "non-compliant",
-    "possible-compliant",
-    "needs-review",
-    "review-records",
-    "rule-hit-stats",
-    "evidence-image-index",
-    "export-summary",
+    "batch-overview-table",
+    "structured-data",
+    "compliant-pdfs",
+    "issue-detail-reports",
 }
 
 EXPORT_SECTION_FOLDERS: dict[str, str] = {
@@ -864,7 +854,6 @@ def _normalize_export_section_keys(selected_sections: list[str] | None) -> set[s
         else:
             resolved.add(normalized)
 
-    resolved.update({"export-summary"})
     return resolved or set(DEFAULT_EXPORT_SECTION_KEYS)
 
 
@@ -1005,8 +994,8 @@ def _write_customer_package_index(
           <tr><td>01-批次质检总报告.html</td><td>客户阅读版总报告。</td></tr>
           <tr><td>02-逐份报告问题说明/</td><td>每一份问题报告的单独说明。</td></tr>
           <tr><td>批次总体情况表/</td><td>可筛选的 Excel 汇总表。</td></tr>
-          <tr><td>问题详情分析报告/</td><td>原始 Markdown 明细，便于内部留档。</td></tr>
-          <tr><td>export-summary.json</td><td>系统接口可读的摘要数据。</td></tr>
+          <tr><td>结构化数据/</td><td>可继续处理的结构化 Excel 文件。</td></tr>
+          <tr><td>合格PDF/</td><td>当前规则下可交付的合格 PDF 文件。</td></tr>
         </tbody>
       </table>
     </section>

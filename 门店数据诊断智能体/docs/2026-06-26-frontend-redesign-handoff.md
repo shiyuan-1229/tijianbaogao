@@ -1236,3 +1236,144 @@ backend:  http://127.0.0.1:8000
 ```
 
 如果再次看到 404，优先确认访问的是根路径还是具体路由；根路径现在应自动跳到 `/quality`。
+## 11. 2026-07-01 交付包导出修复与 GitHub PR 交接
+
+### 11.1 本次用户问题
+
+用户反馈：生成交付包失败，前端提示“请确认后端服务已启动，且数据集路径存在”。实际排查后确认：
+
+- 后端 `/health` 正常返回 `200`。
+- 真实数据目录 `D:\桌面\数据\5人` 存在。
+- 前端 `POST /api/quality/exports` 返回 `500`。
+- 直接调用后端导出接口会卡住/超时。
+
+根因不是后端没启动，而是 `create_export_task()` 生成交付包时复用了完整质量扫描链路，间接触发 PDF 页面渲染与视觉分析，真实数据集下导出包生成过重，导致请求超时或 500。
+
+### 11.2 已完成修复
+
+已在分支 `fix/quality-export-delivery-package` 完成以下改动：
+
+- 导出包生成改为轻量扫描，不再渲染 PDF 页面。
+- 修复导出链路中的变量错误，避免 `resolved_issues` 未定义导致 500。
+- `build_quality_export_summary()` 支持复用已扫描出的 issues，避免导出时重复重型扫描。
+- 交付包 zip 命名改为客户可识别格式：
+  - `体检报告质检交付包_{数据集名}_{年月日_时分}_{任务ID}.zip`
+  - 示例：`体检报告质检交付包_5人_20260701_0534_071da105af12.zip`
+- 交付包内新增客户直观看的 HTML 入口：
+  - `00-交付包说明.html`
+  - `01-批次质检总报告.html`
+  - `02-逐份报告问题说明/*.html`
+- 补齐质量页面按钮操作记录真实后端接口：
+  - 后端：`GET/POST /api/quality/actions`
+  - 前端 BFF：`store-ai-clinic-web/app/api/quality/actions/route.ts`
+  - 前端质量页按钮会记录到真实后端，而不是只做本地假交互。
+
+### 11.3 GitHub 分支与 PR 信息
+
+已执行：
+
+```bash
+git pull --ff-only
+```
+
+结果：`Already up to date.`
+
+当前 Git 仓库路径：
+
+```text
+D:\桌面\医疗夹\github-sync-tijianbaogao
+```
+
+注意：实际运行/调试目录曾是：
+
+```text
+D:\桌面\医疗夹\tijianbaogao
+```
+
+最终已把相关改动同步到 Git 仓库，并提交到新分支：
+
+```text
+branch: fix/quality-export-delivery-package
+commit: ef80f85 Fix quality export delivery package
+remote: origin/fix/quality-export-delivery-package
+```
+
+PR 尚未由 CLI 创建，因为本机没有安装 `gh` 命令。GitHub 已返回可创建 PR 链接：
+
+```text
+https://github.com/shiyuan-1229/tijianbaogao/pull/new/fix/quality-export-delivery-package
+```
+
+如果同事说“没有收到”，需要告诉他：GitHub 不会自动通知，因为现在只是分支已推送，还没有实际创建 PR。请把上面的链接直接发给同事，或让他在 GitHub 仓库里手动选择：
+
+```text
+base: main
+compare: fix/quality-export-delivery-package
+```
+
+建议 PR 标题：
+
+```text
+Fix quality export delivery package
+```
+
+建议 PR 描述：
+
+```md
+## Summary
+- Add real backend action recording for quality page interactions.
+- Generate customer-readable quality delivery packages with clear dataset/time bundle names and HTML entrypoints.
+- Avoid expensive PDF page rendering during export package generation to prevent timeout/500 errors.
+
+## Test Plan
+- uv run --extra dev pytest tests/unit/test_quality_backend.py -q
+- npm test -- tests/unit/quality-shell-interactions.test.tsx
+```
+
+### 11.4 已验证命令
+
+在 Git 仓库 `D:\桌面\医疗夹\github-sync-tijianbaogao\门店数据诊断智能体` 中已通过：
+
+```bash
+uv run --extra dev pytest tests/unit/test_quality_backend.py -q
+```
+
+结果：`27 passed, 3 warnings`
+
+在前端目录 `D:\桌面\医疗夹\github-sync-tijianbaogao\门店数据诊断智能体\store-ai-clinic-web` 中已通过：
+
+```bash
+npm test -- tests/unit/quality-shell-interactions.test.tsx
+```
+
+结果：`23 passed`
+
+另外在本地真实服务上验证过：
+
+- 后端：`http://127.0.0.1:8000/health` 返回 `200 {"status":"ok"}`。
+- 前端：`http://127.0.0.1:3000/quality` 返回 `200`。
+- 通过前端 BFF 调用 `POST http://127.0.0.1:3000/api/quality/exports` 返回 `200`。
+- 真实数据集 `D:/桌面/数据/5人` 生成交付包成功，artifact_count 为 `61`。
+
+### 11.5 本次 PR 变更文件
+
+```text
+门店数据诊断智能体/src/store_ai_clinic/api/routers/quality.py
+门店数据诊断智能体/src/store_ai_clinic/schemas/quality.py
+门店数据诊断智能体/src/store_ai_clinic/services/quality.py
+门店数据诊断智能体/store-ai-clinic-web/app/api/quality/actions/route.ts
+门店数据诊断智能体/store-ai-clinic-web/features/quality/components/quality-shell.tsx
+门店数据诊断智能体/store-ai-clinic-web/tests/unit/quality-shell-interactions.test.tsx
+门店数据诊断智能体/tests/unit/test_quality_backend.py
+```
+
+### 11.6 接手注意事项
+
+1. 不要把 `D:\桌面\医疗夹\tijianbaogao` 当成 Git 仓库；要提交/PR 请使用 `D:\桌面\医疗夹\github-sync-tijianbaogao`。
+2. 不要把 `.env`、真实 API Key、真实客户数据、`质检交付/` 生成包、`.codex-run/` 日志提交到仓库。
+3. 如果前端 API 路由突然返回 HTML 500，并伴随 `Cannot find module './xxx.js'`，优先清理 `store-ai-clinic-web/.next` 并重启前端 dev server。这次遇到过 `.next` chunk 缺失，不是业务接口错误。
+4. 如果再次看到“请确认后端服务已启动，且数据集路径存在”，先分别检查：
+   - `http://127.0.0.1:8000/health`
+   - 数据集路径是否存在
+   - 前端 BFF `/api/quality/exports` 是否返回 JSON，而不是 Next 错误页
+5. 交付包生成不应再触发 PDF 渲染；如果后续改动重新调用 `_default_pdf_page_renderer()`，会导致真实数据集导出再次变慢或超时。

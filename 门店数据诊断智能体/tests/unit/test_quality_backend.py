@@ -21,7 +21,9 @@ from store_ai_clinic.services.quality import (
     build_quality_export_summary,
     create_export_task,
     list_export_tasks,
+    list_quality_actions,
     list_review_records,
+    record_quality_action,
     record_review_decision,
     scan_quality_dataset,
 )
@@ -150,6 +152,53 @@ def test_quality_api_exposes_extracted_requirement_rules(tmp_path: Path, monkeyp
     assert body["dataset_path"] == str(dataset)
     assert body["source_document"].endswith("体检报告需求.docx")
     assert {rule["rule_id"] for rule in body["rules"]} >= {"R-REQ-001", "R-REQ-002", "R-REQ-003", "R-REQ-007", "R-REQ-008"}
+
+
+
+def test_quality_actions_are_recorded_and_queryable(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(settings, "local_storage_root", str(tmp_path / "api-state"))
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/quality/actions",
+        json={
+            "action": "open_report_detail",
+            "label": "查看单报告详情",
+            "page": "tasks",
+            "target": "/agent",
+            "dataset_path": str(tmp_path / "5人"),
+            "payload": {"issue_id": "issue-1"},
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["action"] == "open_report_detail"
+    assert body["label"] == "查看单报告详情"
+    assert body["message"] == "已记录操作：查看单报告详情"
+
+    records = client.get("/api/quality/actions", params={"dataset_path": str(tmp_path / "5人")})
+
+    assert records.status_code == 200
+    assert [item["action"] for item in records.json()] == ["open_report_detail"]
+
+
+def test_quality_action_service_persists_to_jsonl(tmp_path: Path):
+    record_quality_action(
+        action="toggle_rule_status",
+        label="切换 R-OCR-001 状态",
+        page="rules",
+        target="R-OCR-001",
+        dataset_path=tmp_path / "5人",
+        payload={"next_status": "启用"},
+        storage_root=tmp_path / "state",
+    )
+
+    records = list_quality_actions(dataset_path=tmp_path / "5人", storage_root=tmp_path / "state")
+
+    assert len(records) == 1
+    assert records[0].action == "toggle_rule_status"
+    assert records[0].payload == {"next_status": "启用"}
 
 def test_quality_assets_map_archives_pdfs_excels_and_visit_counts(tmp_path: Path):
     dataset = tmp_path / "5人"
@@ -965,6 +1014,10 @@ def test_quality_export_summary_aggregates_real_assets_issues_and_reviews(tmp_pa
         "needs-review",
         "review-records",
         "rule-hit-stats",
+        "batch-overview-table",
+        "structured-data",
+        "compliant-pdfs",
+        "issue-detail-reports",
     ]
     assert [section.item_count for section in summary.sections[1:5]] == [1, 1, 1, 2]
     assert [rule_hit.rule_id for rule_hit in summary.rule_hits] == [
@@ -1007,8 +1060,78 @@ def test_quality_api_exposes_export_summary(tmp_path: Path, monkeypatch):
         "needs-review",
         "review-records",
         "rule-hit-stats",
+        "batch-overview-table",
+        "structured-data",
+        "compliant-pdfs",
+        "issue-detail-reports",
     }
 
+
+def test_quality_export_does_not_render_pdf_pages_during_package_generation(tmp_path: Path, monkeypatch):
+    dataset = build_quality_sample(tmp_path)
+
+    def fail_if_renderer_is_created():
+        raise AssertionError("export package generation must not render PDF pages")
+
+    monkeypatch.setattr("store_ai_clinic.services.quality._default_pdf_page_renderer", fail_if_renderer_is_created)
+
+    export = create_export_task(
+        "快速交付包",
+        dataset_path=dataset,
+        storage_root=tmp_path / "fast-export-state",
+        selected_sections=["issue-detail-reports", "export-summary"],
+        now="2026-06-30T12:20:00+08:00",
+    )
+
+    assert export.status == "done"
+    assert export.bundle_path
+
+def test_quality_export_creates_customer_readable_html_entrypoints(tmp_path: Path):
+    dataset = build_quality_sample(tmp_path)
+    storage_root = tmp_path / "customer-export-state"
+
+    export = create_export_task(
+        "客户交付包",
+        dataset_path=dataset,
+        storage_root=storage_root,
+        selected_sections=[
+            "third-batch-report",
+            "batch-overview-table",
+            "issue-detail-reports",
+            "export-summary",
+        ],
+        now="2026-06-30T12:20:00+08:00",
+    )
+
+    assert export.bundle_name is not None
+    assert export.bundle_name.startswith("体检报告质检交付包_sample-dataset_20260630_1220")
+    assert export.bundle_path is not None
+
+    with ZipFile(Path(export.bundle_path)) as archive:
+        names = set(archive.namelist())
+        assert "00-交付包说明.html" in names
+        assert "01-批次质检总报告.html" in names
+        assert any(name.startswith("02-逐份报告问题说明/") and name.endswith(".html") for name in names)
+
+        index_html = archive.read("00-交付包说明.html").decode("utf-8")
+        assert "sample-dataset" in index_html
+        assert "客户阅读顺序" in index_html
+        assert "01-批次质检总报告.html" in index_html
+        assert "02-逐份报告问题说明" in index_html
+
+        report_html = archive.read("01-批次质检总报告.html").decode("utf-8")
+        assert "批次质检总报告" in report_html
+        assert "02496166_report.pdf" in report_html
+        assert "问题分类统计" in report_html
+
+        detail_htmls = [
+            archive.read(name).decode("utf-8")
+            for name in names
+            if name.startswith("02-逐份报告问题说明/") and name.endswith(".html")
+        ]
+        pdf_detail_html = next(content for content in detail_htmls if "02496166_report.pdf" in content)
+        assert "命中规则" in pdf_detail_html
+        assert "处理建议" in pdf_detail_html
 
 def test_quality_export_batch_deliverables(tmp_path: Path):
     dataset = build_quality_sample(tmp_path)

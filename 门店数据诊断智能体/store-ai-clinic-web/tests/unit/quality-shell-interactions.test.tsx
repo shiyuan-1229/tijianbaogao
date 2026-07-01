@@ -225,6 +225,70 @@ describe("quality workspace interactions", () => {
     expect(screen.getByLabelText("\u5f53\u524d\u95ee\u9898\u8bc1\u636e")).toBeInTheDocument();
   });
 
+
+  it("records screenshot page button actions through backend APIs", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message: "已记录操作：测试动作" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<QualityShell view="issues" issueListVariant="screenshot" dataset={dataset} />);
+
+    await user.click(screen.getByRole("button", { name: "批量标记" }));
+    await user.click(screen.getByRole("button", { name: "进入详情" }));
+    await user.click(screen.getByRole("button", { name: "筛选" }));
+    await user.click(screen.getByRole("button", { name: "查看单报告详情" }));
+
+    cleanup();
+    render(<QualityShell view="detail" reportDetailVariant="screenshot" dataset={dataset} />);
+
+    await user.click(screen.getByRole("button", { name: "上一份" }));
+    await user.click(screen.getByRole("button", { name: "下一份" }));
+    await user.click(screen.getByRole("button", { name: "进入人工复核" }));
+    await user.click(screen.getByRole("button", { name: "提交到人工复核" }));
+
+    cleanup();
+    render(<QualityShell view="review" reviewVariant="screenshot" dataset={dataset} />);
+
+    await user.click(screen.getByRole("button", { name: "只看高风险" }));
+    await user.click(screen.getByRole("button", { name: "保存复核记录" }));
+
+    cleanup();
+    render(<QualityShell view="rules" rulesVariant="screenshot" dataset={dataset} />);
+
+    await user.click(screen.getByRole("button", { name: "导入需求文档" }));
+    await user.click(screen.getByRole("button", { name: "新增规则" }));
+    await user.click(screen.getByRole("button", { name: "保存规则说明" }));
+
+    const ruleStatusButton = screen.getAllByRole("button").find((button) => {
+      const label = button.getAttribute("aria-label") ?? "";
+      return label.includes("R-") && !button.textContent?.includes("R-");
+    });
+    expect(ruleStatusButton).toBeDefined();
+    await user.click(ruleStatusButton!);
+    const actionCalls = fetchMock.mock.calls.filter(([url]) => url === "/api/quality/actions");
+    expect(actionCalls).toHaveLength(14);
+    expect(actionCalls.map(([, init]) => JSON.parse(String((init as RequestInit).body)).action)).toEqual([
+      "batch_mark_issues",
+      "open_report_detail",
+      "apply_issue_filters",
+      "open_report_detail",
+      "previous_report",
+      "next_report",
+      "open_manual_review",
+      "submit_to_manual_review",
+      "filter_high_risk_reviews",
+      "save_review_records",
+      "import_requirement_document",
+      "create_rule_draft",
+      "save_rule_description",
+      "toggle_rule_status",
+    ]);
+  });
   it("renders extracted requirement rules in the rule library", async () => {
     const user = userEvent.setup();
     render(

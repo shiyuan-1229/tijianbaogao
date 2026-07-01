@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import html
 import json
 import re
 import shutil
@@ -102,6 +103,19 @@ class QualityReviewRecord:
 
 
 @dataclass(frozen=True)
+class QualityActionRecord:
+    id: str
+    action: str
+    label: str
+    page: str
+    target: str | None
+    actor: str
+    message: str
+    created_at: str
+    dataset_path: str | None = None
+    payload: dict[str, object] | None = None
+
+@dataclass(frozen=True)
 class QualityExportTask:
     id: str
     export_type: str
@@ -155,6 +169,7 @@ class DatasetFile:
 
 _REVIEW_RECORDS: list[QualityReviewRecord] = []
 _EXPORT_TASKS: list[QualityExportTask] = []
+_ACTION_RECORDS: list[QualityActionRecord] = []
 
 
 def scan_quality_dataset(
@@ -483,6 +498,27 @@ def record_review_decision(
     return record
 
 
+class _NoopPdfPageRenderer:
+    def render_pages(self, pdf_path: Path) -> list[Path]:
+        return []
+
+
+class _NoopVisionAnalyzer:
+    def analyze_image(self, image_path: Path) -> None:
+        return None
+
+    def analyze_images(self, image_paths: list[Path]) -> list[object]:
+        return []
+
+
+def _scan_quality_dataset_for_export(dataset_path: Path, timestamp: datetime) -> QualityDatasetScan:
+    return scan_quality_dataset(
+        dataset_path,
+        now=timestamp,
+        vision_analyzer=_NoopVisionAnalyzer(),
+        pdf_page_renderer=_NoopPdfPageRenderer(),
+    )
+
 def create_export_task(
     export_type: str,
     *,
@@ -501,9 +537,10 @@ def create_export_task(
 
     timestamp = _coerce_datetime(now)
     task_id = f"export-{uuid4().hex[:12]}"
-    summary = build_quality_export_summary(root, now=timestamp, storage_root=storage_root)
+    export_scan = _scan_quality_dataset_for_export(root, timestamp)
+    issues = export_scan.issues
+    summary = build_quality_export_summary(root, now=timestamp, storage_root=storage_root, issues=issues)
     asset_summary = extract_quality_asset_summary(root, now=timestamp)
-    issues = list_quality_issues(root)
     review_records = list_review_records(dataset_path=root, storage_root=storage_root)
     review_status_by_issue = _latest_review_status_by_issue(review_records)
     confirmed_issues, rejected_issues, pending_issues = _split_export_issues(issues, review_status_by_issue)
@@ -511,6 +548,27 @@ def create_export_task(
     export_dir = _quality_export_dir(storage_root, task_id, root, timestamp)
     export_dir.mkdir(parents=True, exist_ok=True)
     artifact_count = 0
+
+    _write_customer_package_index(
+        export_dir,
+        summary=summary,
+        asset_summary=asset_summary,
+        confirmed_issues=confirmed_issues,
+        rejected_issues=rejected_issues,
+        pending_issues=pending_issues,
+        timestamp=timestamp,
+    )
+    artifact_count += 1
+    _write_customer_batch_report_html(
+        export_dir,
+        summary=summary,
+        asset_summary=asset_summary,
+        confirmed_issues=confirmed_issues,
+        rejected_issues=rejected_issues,
+        pending_issues=pending_issues,
+        review_records=review_records,
+    )
+    artifact_count += 1
 
     if "third-batch-report" in section_keys:
         _write_text(
@@ -574,17 +632,24 @@ def create_export_task(
     if "compliant-pdfs" in section_keys:
         artifact_count += _export_compliant_pdfs(_export_section_dir(export_dir, "compliant-pdfs"), root, issues, review_status_by_issue)
     if "issue-detail-reports" in section_keys:
+        detail_statuses = {"confirmed", "needs_review", "ai_reviewing", "disputed"}
         artifact_count += _export_issue_detail_reports(
             _export_section_dir(export_dir, "issue-detail-reports"),
             issues,
             review_status_by_issue,
-            include_statuses={"confirmed", "needs_review", "ai_reviewing", "disputed"},
+            include_statuses=detail_statuses,
+        )
+        artifact_count += _export_customer_issue_detail_html(
+            export_dir / "02-逐份报告问题说明",
+            issues,
+            review_status_by_issue,
+            include_statuses=detail_statuses,
         )
     if "export-summary" in section_keys:
         _write_json(_export_section_file(export_dir, "export-summary", "export-summary.json"), asdict(summary))
         artifact_count += 1
 
-    bundle_name = f"quality-export-{task_id}.zip"
+    bundle_name = f"体检报告质检交付包_{_safe_filename_segment(root.name, '数据集')}_{timestamp.strftime('%Y%m%d_%H%M')}_{task_id.removeprefix('export-')}.zip"
     bundle_path = export_dir / bundle_name
     _zip_export_dir(export_dir, bundle_path)
 
@@ -611,6 +676,7 @@ def build_quality_export_summary(
     *,
     now: str | datetime | None = None,
     storage_root: str | Path | None = None,
+    issues: list[QualityIssue] | None = None,
 ) -> QualityExportSummary:
     from store_ai_clinic.services.quality_assets import extract_quality_asset_summary
     from store_ai_clinic.services.quality_rules import extract_quality_rule_set
@@ -619,14 +685,14 @@ def build_quality_export_summary(
     timestamp = _coerce_datetime(now)
     asset_summary = extract_quality_asset_summary(root, now=timestamp)
     rule_set = extract_quality_rule_set(root)
-    issues = list_quality_issues(root)
+    resolved_issues = issues if issues is not None else list_quality_issues(root)
     review_records = list_review_records(dataset_path=root, storage_root=storage_root)
     review_status_by_issue = _latest_review_status_by_issue(review_records)
 
     confirmed_issues = 0
     rejected_issues = 0
     pending_issues = 0
-    for issue in issues:
+    for issue in resolved_issues:
         resolved_status = review_status_by_issue.get(issue.id, issue.status)
         if resolved_status == "confirmed":
             confirmed_issues += 1
@@ -636,7 +702,7 @@ def build_quality_export_summary(
             pending_issues += 1
 
     rule_name_by_id = {rule.rule_id: rule.rule_name for rule in rule_set.rules}
-    hit_counts = Counter(issue.rule_id for issue in issues)
+    hit_counts = Counter(issue.rule_id for issue in resolved_issues)
     rule_hits = [
         QualityExportRuleHit(
             rule_id=rule_id,
@@ -645,7 +711,7 @@ def build_quality_export_summary(
         )
         for rule_id in sorted(hit_counts)
     ]
-    evidence_image_count = _unique_evidence_image_count(issues)
+    evidence_image_count = _unique_evidence_image_count(resolved_issues)
 
     sections = [
         QualityExportSection(
@@ -654,7 +720,7 @@ def build_quality_export_summary(
             item_count=asset_summary.total_archives,
             description=(
                 f"覆盖 {asset_summary.total_groups} 个年龄段、"
-                f"{asset_summary.total_archives} 份档案、{len(issues)} 个问题。"
+                f"{asset_summary.total_archives} 份档案、{len(resolved_issues)} 个问题。"
             ),
         ),
         QualityExportSection(
@@ -716,7 +782,7 @@ def build_quality_export_summary(
     return QualityExportSummary(
         dataset_path=str(root),
         generated_at=timestamp.isoformat(),
-        total_issues=len(issues),
+        total_issues=len(resolved_issues),
         confirmed_issues=confirmed_issues,
         rejected_issues=rejected_issues,
         pending_issues=pending_issues,
@@ -892,6 +958,234 @@ def _build_quality_export_report(
     return "\n".join(lines)
 
 
+def _write_customer_package_index(
+    export_dir: Path,
+    *,
+    summary: QualityExportSummary,
+    asset_summary: object,
+    confirmed_issues: list[QualityIssue],
+    rejected_issues: list[QualityIssue],
+    pending_issues: list[QualityIssue],
+    timestamp: datetime,
+) -> None:
+    dataset_label = _safe_filename_segment(Path(summary.dataset_path).name, "数据集")
+    body = f"""
+    <section class="hero">
+      <p class="eyebrow">体检报告质检交付包</p>
+      <h1>{html.escape(dataset_label)} 客户交付说明</h1>
+      <p>本交付包生成于 {html.escape(_format_datetime(timestamp))}，对应数据集：<strong>{html.escape(summary.dataset_path)}</strong></p>
+    </section>
+    <section class="metrics">
+      {_metric_card("年龄段", asset_summary.total_groups)}
+      {_metric_card("档案数", asset_summary.total_archives)}
+      {_metric_card("PDF", asset_summary.total_pdf_files)}
+      {_metric_card("Excel", asset_summary.total_excel_files)}
+      {_metric_card("总问题", summary.total_issues)}
+      {_metric_card("已确认不合规", len(confirmed_issues))}
+      {_metric_card("可能合规", len(rejected_issues))}
+      {_metric_card("待复核", len(pending_issues))}
+    </section>
+    <section>
+      <h2>客户阅读顺序</h2>
+      <ol class="steps">
+        <li><a href="01-批次质检总报告.html">先看 01-批次质检总报告.html</a>：了解本批次整体结论、问题分布和高风险摘要。</li>
+        <li><a href="02-逐份报告问题说明/">再看 02-逐份报告问题说明</a>：按报告文件逐份查看问题、页码、规则和处理建议。</li>
+        <li>需要复核原始数据时，再打开 Excel、问题清单、合格 PDF 等附属文件夹。</li>
+      </ol>
+    </section>
+    <section>
+      <h2>交付包内容</h2>
+      <table>
+        <thead><tr><th>位置</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>01-批次质检总报告.html</td><td>客户阅读版总报告。</td></tr>
+          <tr><td>02-逐份报告问题说明/</td><td>每一份问题报告的单独说明。</td></tr>
+          <tr><td>批次总体情况表/</td><td>可筛选的 Excel 汇总表。</td></tr>
+          <tr><td>问题详情分析报告/</td><td>原始 Markdown 明细，便于内部留档。</td></tr>
+          <tr><td>export-summary.json</td><td>系统接口可读的摘要数据。</td></tr>
+        </tbody>
+      </table>
+    </section>
+    """
+    _write_text(export_dir / "00-交付包说明.html", _html_page("交付包说明", body))
+
+
+def _write_customer_batch_report_html(
+    export_dir: Path,
+    *,
+    summary: QualityExportSummary,
+    asset_summary: object,
+    confirmed_issues: list[QualityIssue],
+    rejected_issues: list[QualityIssue],
+    pending_issues: list[QualityIssue],
+    review_records: list[QualityReviewRecord],
+) -> None:
+    category_counts = Counter(issue.category for issue in confirmed_issues + rejected_issues + pending_issues)
+    high_issues = [issue for issue in confirmed_issues + pending_issues if issue.severity == "high"]
+    issue_rows = "".join(
+        f"<tr><td>{html.escape(issue.file_name)}</td><td>{html.escape(issue.archive_id)}</td><td>{html.escape(issue.page)}</td><td>{html.escape(issue.rule_id)}</td><td>{html.escape(_severity_label(issue.severity))}</td><td>{html.escape(issue.evidence)}</td></tr>"
+        for issue in (confirmed_issues + pending_issues)[:50]
+    ) or "<tr><td colspan='6'>本批次暂无已确认或待复核问题。</td></tr>"
+    rule_rows = "".join(
+        f"<tr><td>{html.escape(rule.rule_id)}</td><td>{html.escape(rule.rule_name or rule.rule_id)}</td><td>{rule.hit_count}</td></tr>"
+        for rule in summary.rule_hits
+    ) or "<tr><td colspan='3'>暂无规则命中。</td></tr>"
+    category_items = "".join(f"<li>{html.escape(_category_label(category))}：{count}</li>" for category, count in sorted(category_counts.items())) or "<li>暂无问题分类统计。</li>"
+    high_items = "".join(f"<li><strong>{html.escape(issue.file_name)}</strong>：{html.escape(issue.evidence)}</li>" for issue in high_issues[:10]) or "<li>暂无高风险问题。</li>"
+    body = f"""
+    <section class="hero">
+      <p class="eyebrow">客户阅读版</p>
+      <h1>批次质检总报告</h1>
+      <p>数据集：<strong>{html.escape(summary.dataset_path)}</strong></p>
+    </section>
+    <section class="metrics">
+      {_metric_card("档案数", asset_summary.total_archives)}
+      {_metric_card("PDF", asset_summary.total_pdf_files)}
+      {_metric_card("Excel", asset_summary.total_excel_files)}
+      {_metric_card("总问题", summary.total_issues)}
+      {_metric_card("已确认不合规", summary.confirmed_issues)}
+      {_metric_card("可能合规", summary.rejected_issues)}
+      {_metric_card("待复核", summary.pending_issues)}
+      {_metric_card("复核记录", len(review_records))}
+    </section>
+    <section>
+      <h2>本批次结论</h2>
+      <p>本报告用于说明当前数据集中体检报告的质检结果。已确认不合规和待复核项目需要客户重点查看；可能合规项目保留为复核参考。</p>
+    </section>
+    <section>
+      <h2>问题分类统计</h2>
+      <ul>{category_items}</ul>
+    </section>
+    <section>
+      <h2>高风险问题摘要</h2>
+      <ul>{high_items}</ul>
+    </section>
+    <section>
+      <h2>不合规与待复核报告清单</h2>
+      <table>
+        <thead><tr><th>报告文件</th><th>档案号</th><th>页码</th><th>命中规则</th><th>严重程度</th><th>证据说明</th></tr></thead>
+        <tbody>{issue_rows}</tbody>
+      </table>
+    </section>
+    <section>
+      <h2>规则命中统计</h2>
+      <table><thead><tr><th>规则 ID</th><th>规则名称</th><th>命中次数</th></tr></thead><tbody>{rule_rows}</tbody></table>
+    </section>
+    """
+    _write_text(export_dir / "01-批次质检总报告.html", _html_page("批次质检总报告", body))
+
+
+def _export_customer_issue_detail_html(
+    output_dir: Path,
+    issues: list[QualityIssue],
+    review_status_by_issue: dict[str, ReviewStatus | Literal["disputed"]],
+    *,
+    include_statuses: set[str],
+) -> int:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    grouped: dict[str, list[QualityIssue]] = {}
+    for issue in issues:
+        status = _resolved_issue_status(issue, review_status_by_issue)
+        if status not in include_statuses:
+            continue
+        grouped.setdefault(issue.file_name, []).append(issue)
+
+    count = 0
+    for file_name, file_issues in sorted(grouped.items()):
+        safe_name = _safe_filename_segment(Path(file_name).stem, "report")
+        issue_sections = []
+        for index, issue in enumerate(file_issues, start=1):
+            status = _resolved_issue_status(issue, review_status_by_issue)
+            issue_sections.append(
+                f"""
+                <article class="issue">
+                  <h2>问题 {index}</h2>
+                  <dl>
+                    <dt>当前判定</dt><dd>{html.escape(_status_label(status))}</dd>
+                    <dt>问题类型</dt><dd>{html.escape(issue.issue_type)}</dd>
+                    <dt>严重程度</dt><dd>{html.escape(_severity_label(issue.severity))}</dd>
+                    <dt>命中规则</dt><dd>{html.escape(issue.rule_id)}</dd>
+                    <dt>页码/位置</dt><dd>{html.escape(issue.page)}</dd>
+                    <dt>证据说明</dt><dd>{html.escape(issue.evidence)}</dd>
+                    <dt>AI 判断</dt><dd>{html.escape(issue.ai_judgement)}</dd>
+                    <dt>处理建议</dt><dd>{html.escape(issue.recommendation)}</dd>
+                    <dt>置信度</dt><dd>{issue.confidence:.2f}</dd>
+                  </dl>
+                </article>
+                """
+            )
+        body = f"""
+        <section class="hero">
+          <p class="eyebrow">逐份报告问题说明</p>
+          <h1>{html.escape(file_name)}</h1>
+          <p>档案号：{html.escape(file_issues[0].archive_id)}；年龄段：{html.escape(file_issues[0].group)}；问题数量：{len(file_issues)}</p>
+        </section>
+        {''.join(issue_sections)}
+        """
+        _write_text(output_dir / f"{safe_name}_问题说明.html", _html_page(f"{file_name} 问题说明", body))
+        count += 1
+    return count
+
+
+def _html_page(title: str, body: str) -> str:
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{html.escape(title)}</title>
+  <style>
+    body {{ margin: 0; background: #f5f7fb; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }}
+    main {{ max-width: 1120px; margin: 0 auto; padding: 32px 24px 56px; }}
+    .hero {{ background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 24px; margin-bottom: 16px; }}
+    .eyebrow {{ margin: 0 0 8px; color: #0b8b8b; font-weight: 700; font-size: 13px; }}
+    h1 {{ margin: 0 0 12px; font-size: 28px; line-height: 1.25; }}
+    h2 {{ margin: 0 0 12px; font-size: 18px; }}
+    section, article.issue {{ background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 20px; margin-top: 14px; }}
+    .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; background: transparent; border: 0; padding: 0; }}
+    .metric {{ background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 16px; }}
+    .metric span {{ display: block; color: #64748b; font-size: 13px; }}
+    .metric strong {{ display: block; margin-top: 8px; font-size: 24px; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+    th, td {{ border-bottom: 1px solid #e5e7eb; padding: 10px 8px; text-align: left; vertical-align: top; }}
+    th {{ background: #f8fafc; color: #334155; }}
+    a {{ color: #0b8b8b; font-weight: 700; }}
+    .steps li {{ margin: 8px 0; }}
+    dl {{ display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 14px; margin: 0; }}
+    dt {{ color: #64748b; font-weight: 700; }}
+    dd {{ margin: 0; }}
+  </style>
+</head>
+<body><main>{body}</main></body>
+</html>"""
+
+
+def _metric_card(label: str, value: object) -> str:
+    return f"<div class='metric'><span>{html.escape(label)}</span><strong>{html.escape(str(value))}</strong></div>"
+
+
+def _category_label(category: str) -> str:
+    return {
+        "privacy": "隐私脱敏",
+        "content": "内容完整性",
+        "format": "格式页数",
+        "history": "历史对比",
+    }.get(category, category)
+
+
+def _severity_label(severity: str) -> str:
+    return {"high": "高", "medium": "中", "low": "低"}.get(severity, severity)
+
+
+def _status_label(status: str) -> str:
+    return {
+        "confirmed": "已确认不合规",
+        "rejected": "可能合规",
+        "needs_review": "待人工复核",
+        "ai_reviewing": "AI 复核中",
+        "disputed": "存在争议",
+    }.get(status, status)
+
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -1026,7 +1320,7 @@ def _export_structured_data_tables(output_dir: Path, root: Path) -> int:
                 grouped_rows[key] = [headers]
             grouped_rows[key].append(row)
     for key, rows in sorted(grouped_rows.items()):
-        safe_name = re.sub(r'[<>:"/\\\\|?*]+', "_", key)
+        safe_name = _safe_filename_segment(key, "archive")
         _write_xlsx_rows(output_dir / f"{safe_name}.xlsx", rows)
         count += 1
     return count
@@ -1067,7 +1361,7 @@ def _export_issue_detail_reports(
 
     count = 0
     for file_name, file_issues in sorted(grouped.items()):
-        safe_name = re.sub(r'[<>:"/\\\\|?*]+', "_", Path(file_name).stem)
+        safe_name = _safe_filename_segment(Path(file_name).stem, "report")
         lines = [
             f"# {file_name} 问题详情分析",
             "",
@@ -1092,6 +1386,53 @@ def _export_issue_detail_reports(
         _write_text(output_dir / f"{safe_name}.md", "\n".join(lines))
         count += 1
     return count
+
+
+def record_quality_action(
+    *,
+    action: str,
+    label: str,
+    page: str,
+    target: str | None = None,
+    actor: str = "operator",
+    dataset_path: str | Path | None = None,
+    payload: dict[str, object] | None = None,
+    storage_root: str | Path | None = None,
+    now: str | datetime | None = None,
+) -> QualityActionRecord:
+    timestamp = _coerce_datetime(now)
+    record = QualityActionRecord(
+        id=f"quality-action-{uuid4().hex[:12]}",
+        action=action.strip(),
+        label=label.strip(),
+        page=page.strip(),
+        target=target.strip() if isinstance(target, str) and target.strip() else None,
+        actor=actor.strip() or "operator",
+        message=f"已记录操作：{label.strip()}",
+        created_at=timestamp.isoformat(),
+        dataset_path=str(Path(dataset_path)) if dataset_path else None,
+        payload=payload or {},
+    )
+    _ACTION_RECORDS.append(record)
+    _append_jsonl(_action_records_path(storage_root), asdict(record))
+    return record
+
+
+def list_quality_actions(
+    *,
+    dataset_path: str | Path | None = None,
+    storage_root: str | Path | None = None,
+) -> list[QualityActionRecord]:
+    records = _read_jsonl(_action_records_path(storage_root))
+    if records:
+        result = [QualityActionRecord(**record) for record in records]
+    else:
+        result = list(_ACTION_RECORDS)
+    if dataset_path is not None:
+        expected = str(Path(dataset_path))
+        result = [record for record in result if record.dataset_path == expected]
+    return result
+
 def list_review_records(
     *,
     dataset_path: str | Path | None = None,
@@ -1161,13 +1502,17 @@ def _quality_deliverables_root(storage_root: str | Path | None) -> Path:
     return storage / deliverables_name
 
 
+def _safe_filename_segment(value: str, fallback: str) -> str:
+    normalized = re.sub(r'[<>:"/\\|?*\s]+', "_", value).strip("._")
+    return normalized or fallback
+
 def _quality_export_dir(
     storage_root: str | Path | None,
     task_id: str,
     dataset_path: Path,
     timestamp: datetime,
 ) -> Path:
-    dataset_label = re.sub(r'[<>:"/\\\\|?*\\s]+', "_", dataset_path.name or "dataset").strip("._") or "dataset"
+    dataset_label = _safe_filename_segment(dataset_path.name or "dataset", "dataset")
     stamp = timestamp.strftime("%Y%m%d_%H%M%S")
     short_id = task_id.removeprefix("export-")
     return _quality_deliverables_root(storage_root) / f"{dataset_label}_{stamp}_{short_id}"
@@ -1182,6 +1527,9 @@ def _export_section_dir(export_dir: Path, section_key: str) -> Path:
 
 def _export_section_file(export_dir: Path, section_key: str, file_name: str) -> Path:
     return _export_section_dir(export_dir, section_key) / file_name
+
+def _action_records_path(storage_root: str | Path | None) -> Path:
+    return _quality_state_dir(storage_root) / "action-records.jsonl"
 
 def _review_records_path(storage_root: str | Path | None) -> Path:
     return _quality_state_dir(storage_root) / "review-records.jsonl"

@@ -1,4 +1,4 @@
-﻿from typing import Annotated, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
@@ -144,6 +144,32 @@ class QualityReviewRecord(BaseModel):
     created_at: str
     dataset_path: str | None = None
 
+
+
+
+class QualityActionRequest(BaseModel):
+    action: NonEmptyString
+    label: NonEmptyString
+    page: NonEmptyString
+    target: str | None = None
+    actor: NonEmptyString = "operator"
+    dataset_path: str | None = None
+    payload: dict[str, object] = {}
+
+
+class QualityActionRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    action: str
+    label: str
+    page: str
+    target: str | None = None
+    actor: str
+    message: str
+    created_at: str
+    dataset_path: str | None = None
+    payload: dict[str, object] | None = None
 
 class QualityExportRequest(BaseModel):
     export_type: NonEmptyString

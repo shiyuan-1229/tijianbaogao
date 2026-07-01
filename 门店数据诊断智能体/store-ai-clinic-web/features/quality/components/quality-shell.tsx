@@ -627,6 +627,39 @@ export function QualityShell({
     filteredIssues[0] ??
     allIssues[0];
 
+  async function recordQualityAction(
+    action: string,
+    label: string,
+    page: string,
+    target?: string,
+    payload: Record<string, unknown> = {},
+  ) {
+    setOperationMessage(`正在记录操作：${label}`);
+    try {
+      const response = await fetch("/api/quality/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          label,
+          page,
+          target,
+          actor: "operator",
+          dataset_path: activeDatasetPath,
+          payload,
+        }),
+      });
+      const data = (await response.json()) as { message?: string };
+      if (!response.ok) throw new Error(data.message ?? "action failed");
+      const message = data.message ?? `已记录操作：${label}`;
+      setOperationMessage(message);
+      return message;
+    } catch {
+      const message = `操作记录失败：${label}。请确认后端服务已启动。`;
+      setOperationMessage(message);
+      return message;
+    }
+  }
   function handleSelectIssue(issueId: string) {
     const nextIssue = allIssues.find((issue) => issue.id === issueId) ?? filteredIssues.find((issue) => issue.id === issueId);
     setSelectedIssueId(issueId);
@@ -743,12 +776,14 @@ export function QualityShell({
         }}
         onToggleFilterMenu={setOpenFilterMenu}
         onSelectIssue={handleSelectIssue}
+        operationMessage={operationMessage}
+        onRecordAction={recordQualityAction}
       />
     );
   }
 
   if (view === "detail" && reportDetailVariant === "screenshot") {
-    return <SingleReportDetailSnapshotPage />;
+    return <SingleReportDetailSnapshotPage operationMessage={operationMessage} onRecordAction={recordQualityAction} />;
   }
 
   if (view === "review" && reviewVariant === "screenshot") {
@@ -760,12 +795,14 @@ export function QualityShell({
         reviewFeedback={reviewFeedback}
         onSelectIssue={handleSelectIssue}
         onReviewDecision={recordReviewDecision}
+        operationMessage={operationMessage}
+        onRecordAction={recordQualityAction}
       />
     );
   }
 
   if (view === "rules" && rulesVariant === "screenshot") {
-    return <RulesLibrarySnapshotPage />;
+    return <RulesLibrarySnapshotPage datasetPath={activeDatasetPath} onRecordAction={recordQualityAction} />;
   }
 
   if (view === "export") {
@@ -886,7 +923,7 @@ export function QualityShell({
             onPreviewPageChange={setActivePreviewPage}
             onClose={() => setIsEvidenceOpen(false)}
             onReviewDecision={recordReviewDecision}
-          />
+      />
         ) : null}
       </main>
     </div>
@@ -1159,7 +1196,7 @@ function CleaningResultPanel({ issues, onSelectIssue }: { issues: QualityIssue[]
   );
 }
 
-function IssueListSnapshotPage({ issues, totalIssues, selectedIssue, selectedIssueId, query, selectedFilter, selectedSeverity, selectedStatus, openFilterMenu, onQueryChange, onSelectFilter, onSelectSeverity, onSelectStatus, onToggleFilterMenu, onSelectIssue }: { issues: QualityIssue[]; totalIssues: number; selectedIssue?: QualityIssue; selectedIssueId?: string; query: string; selectedFilter: IssueCategory; selectedSeverity: SeverityFilter; selectedStatus: StatusFilter; openFilterMenu: FilterMenuKey; onQueryChange: (value: string) => void; onSelectFilter: (value: IssueCategory) => void; onSelectSeverity: (value: SeverityFilter) => void; onSelectStatus: (value: StatusFilter) => void; onToggleFilterMenu: (value: FilterMenuKey) => void; onSelectIssue: (id: string) => void; }) {
+function IssueListSnapshotPage({ issues, totalIssues, selectedIssue, selectedIssueId, query, selectedFilter, selectedSeverity, selectedStatus, openFilterMenu, operationMessage, onQueryChange, onSelectFilter, onSelectSeverity, onSelectStatus, onToggleFilterMenu, onSelectIssue, onRecordAction }: { issues: QualityIssue[]; totalIssues: number; selectedIssue?: QualityIssue; selectedIssueId?: string; query: string; selectedFilter: IssueCategory; selectedSeverity: SeverityFilter; selectedStatus: StatusFilter; openFilterMenu: FilterMenuKey; operationMessage: string; onQueryChange: (value: string) => void; onSelectFilter: (value: IssueCategory) => void; onSelectSeverity: (value: SeverityFilter) => void; onSelectStatus: (value: StatusFilter) => void; onToggleFilterMenu: (value: FilterMenuKey) => void; onSelectIssue: (id: string) => void; onRecordAction: (action: string, label: string, page: string, target?: string, payload?: Record<string, unknown>) => Promise<string>; }) {
   const activeIssue = selectedIssue ?? issues[0];
   return (
     <div className="min-h-full bg-[#f5f7fb] text-[#111827]">
@@ -1169,10 +1206,12 @@ function IssueListSnapshotPage({ issues, totalIssues, selectedIssue, selectedIss
           <p className="mt-1 text-sm leading-5 text-[#486179]">全局分诊，按风险类型、规则和状态定位问题，不在这里做人工作结论。</p>
         </div>
         <div className="flex items-center gap-3">
-          <button type="button" className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">批量标记</button>
-          <button type="button" className="h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">进入详情</button>
+          <button type="button" onClick={() => void onRecordAction("batch_mark_issues", "批量标记", "tasks", "selected-issues", { issue_ids: issues.map((issue) => issue.id) })} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">批量标记</button>
+          <button type="button" onClick={() => void onRecordAction("open_report_detail", "进入详情", "tasks", "/agent", { issue_id: activeIssue?.id })} className="h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">进入详情</button>
         </div>
       </header>
+
+      {operationMessage ? <div role="status" className="border-b border-[#d9e0e8] bg-[#ecfeff] px-6 py-2 text-sm font-semibold text-[#0f766e]">{operationMessage}</div> : null}
 
       <main className="space-y-3 p-4">
         <section aria-label="问题统计" className="grid gap-3 lg:grid-cols-4">
@@ -1193,11 +1232,12 @@ function IssueListSnapshotPage({ issues, totalIssues, selectedIssue, selectedIss
           onSelectSeverity={onSelectSeverity}
           onSelectStatus={onSelectStatus}
           onToggleFilterMenu={onToggleFilterMenu}
+          onApplyFilters={() => void onRecordAction("apply_issue_filters", "筛选", "tasks", "issue-list", { query, selected_filter: selectedFilter, selected_severity: selectedSeverity, selected_status: selectedStatus })}
         />
 
         <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
           <IssueSnapshotTable issues={issues} totalIssues={totalIssues} selectedIssueId={selectedIssueId} onSelectIssue={onSelectIssue} />
-          <TriageSummaryPanel issue={activeIssue} />
+          <TriageSummaryPanel issue={activeIssue} onOpenDetail={() => void onRecordAction("open_report_detail", "查看单报告详情", "tasks", "/agent", { issue_id: activeIssue?.id })} />
         </section>
       </main>
     </div>
@@ -1214,7 +1254,7 @@ function IssueStatCard({ title, value, description }: { title: string; value: st
   );
 }
 
-function IssueListFilterBar({ query, selectedFilter, selectedSeverity, selectedStatus, openFilterMenu, onQueryChange, onSelectFilter, onSelectSeverity, onSelectStatus, onToggleFilterMenu }: { query: string; selectedFilter: IssueCategory; selectedSeverity: SeverityFilter; selectedStatus: StatusFilter; openFilterMenu: FilterMenuKey; onQueryChange: (value: string) => void; onSelectFilter: (value: IssueCategory) => void; onSelectSeverity: (value: SeverityFilter) => void; onSelectStatus: (value: StatusFilter) => void; onToggleFilterMenu: (value: FilterMenuKey) => void; }) {
+function IssueListFilterBar({ query, selectedFilter, selectedSeverity, selectedStatus, openFilterMenu, onQueryChange, onSelectFilter, onSelectSeverity, onSelectStatus, onToggleFilterMenu, onApplyFilters }: { query: string; selectedFilter: IssueCategory; selectedSeverity: SeverityFilter; selectedStatus: StatusFilter; openFilterMenu: FilterMenuKey; onQueryChange: (value: string) => void; onSelectFilter: (value: IssueCategory) => void; onSelectSeverity: (value: SeverityFilter) => void; onSelectStatus: (value: StatusFilter) => void; onToggleFilterMenu: (value: FilterMenuKey) => void; onApplyFilters: () => void; }) {
   return (
     <section className="rounded-lg border border-[#d9e0e8] bg-white p-2">
       <div className="grid gap-2 xl:grid-cols-[124px_124px_124px_124px_minmax(220px,1fr)_54px]">
@@ -1237,7 +1277,7 @@ function IssueListFilterBar({ query, selectedFilter, selectedSeverity, selectedS
           <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="请输入文件名、规则或证据关键词" className="h-9 w-full rounded-md border border-[#d9e0e8] bg-white pl-3 pr-9 text-sm text-[#202733] outline-none transition focus:border-[#0b9a9a]" />
           <Search aria-hidden="true" className="absolute right-3 top-2.5 h-4 w-4 text-[#6b7280]" />
         </label>
-        <button type="button" className="inline-flex h-9 items-center justify-center rounded-md border border-[#cfd8e3] bg-white px-3 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">筛选</button>
+        <button type="button" onClick={onApplyFilters} className="inline-flex h-9 items-center justify-center rounded-md border border-[#cfd8e3] bg-white px-3 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">筛选</button>
       </div>
     </section>
   );
@@ -1287,7 +1327,7 @@ function IssueSnapshotTable({ issues, totalIssues, selectedIssueId, onSelectIssu
   );
 }
 
-function TriageSummaryPanel({ issue }: { issue?: QualityIssue }) {
+function TriageSummaryPanel({ issue, onOpenDetail }: { issue?: QualityIssue; onOpenDetail: () => void }) {
   return (
     <aside aria-label="分诊证据摘要" className="min-h-[620px] rounded-lg border border-[#d9e0e8] bg-white">
       <div className="border-b border-[#d9e0e8] px-4 py-4">
@@ -1310,7 +1350,7 @@ function TriageSummaryPanel({ issue }: { issue?: QualityIssue }) {
           <h3 className="text-sm font-semibold text-[#111827]">下一步</h3>
           <p className="mt-3 text-sm leading-6 text-[#486179]">{issue?.recommendation ?? "进入单报告详情查看页面框选、OCR 文本和结构化数据对应关系。"}</p>
         </div>
-        <button type="button" className="h-9 w-full rounded-md bg-[#0b9a9a] text-sm font-semibold text-white hover:bg-[#087f7f]">查看单报告详情</button>
+        <button type="button" onClick={onOpenDetail} className="h-9 w-full rounded-md bg-[#0b9a9a] text-sm font-semibold text-white hover:bg-[#087f7f]">查看单报告详情</button>
       </div>
     </aside>
   );
@@ -1500,7 +1540,13 @@ function EvidenceMarker({ issue }: { issue: QualityIssue }) {
   return <div aria-label={`${evidenceLabelForIssue(issue)}标注：${issue.issueType}`} className="absolute rounded border-2 border-[#ef4444] bg-[#ef4444]/15" style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` }} />;
 }
 
-function SingleReportDetailSnapshotPage() {
+function SingleReportDetailSnapshotPage({ operationMessage, onRecordAction }: { operationMessage: string; onRecordAction: (action: string, label: string, page: string, target?: string, payload?: Record<string, unknown>) => Promise<string>; }) {
+  const [activePage, setActivePage] = useState(2);
+  const reportFileName = "王五_体检报告.pdf";
+  function selectPage(page: number) {
+    setActivePage(page);
+    void onRecordAction("select_report_page", `第${page}页`, "agent", reportFileName, { page });
+  }
   return (
     <div className="min-h-full bg-[#f5f7fb] text-[#111827]">
       <header className="flex min-h-[62px] items-center justify-between border-b border-[#d9e0e8] bg-white px-6 py-3">
@@ -1509,18 +1555,20 @@ function SingleReportDetailSnapshotPage() {
           <p className="mt-1 text-sm leading-5 text-[#486179]">围绕一份报告核验证据链，证明每个判断都能追溯到文件、页码、字段和规则。</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">上一份</button>
-          <button type="button" className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">下一份</button>
-          <button type="button" className="ml-1 h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">进入人工复核</button>
+          <button type="button" onClick={() => void onRecordAction("previous_report", "上一份", "agent", reportFileName)} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">上一份</button>
+          <button type="button" onClick={() => void onRecordAction("next_report", "下一份", "agent", reportFileName)} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">下一份</button>
+          <button type="button" onClick={() => void onRecordAction("open_manual_review", "进入人工复核", "agent", "/brands", { file_name: reportFileName })} className="ml-1 h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">进入人工复核</button>
         </div>
       </header>
+
+      {operationMessage ? <div role="status" className="border-b border-[#d9e0e8] bg-[#ecfeff] px-6 py-2 text-sm font-semibold text-[#0f766e]">{operationMessage}</div> : null}
 
       <main className="grid gap-3 p-4 xl:grid-cols-[minmax(420px,1.25fr)_minmax(320px,0.95fr)_minmax(300px,0.9fr)]">
         <section aria-label="PDF 页面预览" className="min-h-[808px] overflow-hidden rounded-lg border border-[#d9e0e8] bg-white">
           <div className="flex h-[66px] items-center justify-between border-b border-[#d9e0e8] px-4">
             <div>
               <h2 className="text-lg font-semibold text-[#111827]">PDF 页面预览</h2>
-              <p className="mt-1 text-sm text-[#486179]">王五_体检报告.pdf，第 2 / 5 页</p>
+              <p className="mt-1 text-sm text-[#486179]">{reportFileName}，第 {activePage} / 5 页</p>
             </div>
             <span className="rounded-md border border-[#fecdd3] bg-[#fff1f2] px-2.5 py-1 text-xs font-semibold text-[#dc2626]">未脱敏标注</span>
           </div>
@@ -1556,7 +1604,7 @@ function SingleReportDetailSnapshotPage() {
           <div className="border-t border-[#e6ebf1] bg-[#f8fafc] p-3">
             <div className="grid grid-cols-5 gap-2">
               {[1, 2, 3, 4, 5].map((page) => (
-                <button key={page} type="button" className={page === 2 ? "h-[62px] rounded-md border border-[#0b9a9a] bg-[#e6f7f7] text-sm font-semibold text-[#0b8b8b]" : "h-[62px] rounded-md border border-[#d9e0e8] bg-white text-sm text-[#486179] hover:bg-[#f7f9fb]"}>第{page}页</button>
+                <button key={page} type="button" onClick={() => selectPage(page)} className={page === activePage ? "h-[62px] rounded-md border border-[#0b9a9a] bg-[#e6f7f7] text-sm font-semibold text-[#0b8b8b]" : "h-[62px] rounded-md border border-[#d9e0e8] bg-white text-sm text-[#486179] hover:bg-[#f7f9fb]"}>第{page}页</button>
               ))}
             </div>
           </div>
@@ -1600,7 +1648,7 @@ function SingleReportDetailSnapshotPage() {
                 <span className="rounded-md border border-[#bfdbfe] bg-[#eff6ff] px-2 py-1 text-xs font-semibold text-[#2563eb]">Excel 对照</span>
               </div>
             </div>
-            <button type="button" className="h-9 w-full rounded-md bg-[#0b9a9a] text-sm font-semibold text-white hover:bg-[#087f7f]">提交到人工复核</button>
+            <button type="button" onClick={() => void onRecordAction("submit_to_manual_review", "提交到人工复核", "agent", "/brands", { file_name: reportFileName, page: activePage })} className="h-9 w-full rounded-md bg-[#0b9a9a] text-sm font-semibold text-white hover:bg-[#087f7f]">提交到人工复核</button>
           </div>
         </section>
       </main>
@@ -1608,7 +1656,7 @@ function SingleReportDetailSnapshotPage() {
   );
 }
 
-function ManualReviewSnapshotPage({ issues, selectedIssue, selectedIssueId, reviewFeedback, onSelectIssue, onReviewDecision }: { issues: QualityIssue[]; selectedIssue?: QualityIssue; selectedIssueId?: string; reviewFeedback: string; onSelectIssue: (id: string) => void; onReviewDecision: (decision: ReviewDecision) => void | Promise<void> }) {
+function ManualReviewSnapshotPage({ issues, selectedIssue, selectedIssueId, reviewFeedback, operationMessage, onSelectIssue, onReviewDecision, onRecordAction }: { issues: QualityIssue[]; selectedIssue?: QualityIssue; selectedIssueId?: string; reviewFeedback: string; operationMessage: string; onSelectIssue: (id: string) => void; onReviewDecision: (decision: ReviewDecision) => void | Promise<void>; onRecordAction: (action: string, label: string, page: string, target?: string, payload?: Record<string, unknown>) => Promise<string> }) {
   const queueIssues = [
     issues.find((issue) => issue.id === "screenshot-privacy-wangwu"),
     issues.find((issue) => issue.id === "screenshot-format-lisi"),
@@ -1624,10 +1672,12 @@ function ManualReviewSnapshotPage({ issues, selectedIssue, selectedIssueId, revi
           <p className="mt-1 text-sm leading-5 text-[#486179]">只处理人工决策：确认、驳回、标记争议和备注，记录复核差异。</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">只看高风险</button>
-          <button type="button" className="h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">保存复核记录</button>
+          <button type="button" onClick={() => void onRecordAction("filter_high_risk_reviews", "只看高风险", "brands", "review-queue", { severity: "high" })} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">只看高风险</button>
+          <button type="button" onClick={() => void onRecordAction("save_review_records", "保存复核记录", "brands", "review-records", { issue_id: activeIssue?.id })} className="h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">保存复核记录</button>
         </div>
       </header>
+
+      {operationMessage ? <div role="status" className="border-b border-[#d9e0e8] bg-[#ecfeff] px-6 py-2 text-sm font-semibold text-[#0f766e]">{operationMessage}</div> : null}
 
       <main className="space-y-3 p-4">
         <section aria-label="复核统计" className="grid gap-3 lg:grid-cols-4">
@@ -1761,7 +1811,7 @@ function ReviewQueuePanel({ issues, selectedIssue, onSelectIssue }: { issues: Qu
   return <section className="rounded-lg border border-[#dfe4ea] bg-white p-4"><h2 className="text-lg font-semibold text-[#151922]">人工复核队列</h2><p className="mt-1 text-sm text-[#5e6978]">优先处理高风险问题，并保留争议记录。</p><div className="mt-4 grid gap-3">{issues.map((issue) => <button key={issue.id} type="button" onClick={() => onSelectIssue(issue.id)} className={issue.id === selectedIssue?.id ? "rounded-lg border border-[#0b9a9a] bg-[#f3fbfb] p-4 text-left" : "rounded-lg border border-[#eef2f6] p-4 text-left"}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-[#202733]">{issue.fileName}</span><StatusBadge status={issue.status} /></div><p className="mt-2 text-sm text-[#5e6978]">{issue.evidence}</p></button>)}</div></section>;
 }
 
-function RulesLibrarySnapshotPage() {
+function RulesLibrarySnapshotPage({ datasetPath, onRecordAction }: { datasetPath: string; onRecordAction: (action: string, label: string, page: string, target?: string, payload?: Record<string, unknown>) => Promise<string> }) {
   const categories = [
     { id: "privacy", name: "脱敏风险", count: "8", description: "姓名、身份证、手机号、机构编码" },
     { id: "format", name: "页数与格式", count: "6", description: "页数边界、表格断页、扫描质量" },
@@ -1876,12 +1926,13 @@ function RulesLibrarySnapshotPage() {
     if (normalized && nextRule) setSelectedRuleId(nextRule.id);
   }
 
-  function toggleRuleStatus(ruleId: string) {
+  async function toggleRuleStatus(ruleId: string) {
     const rule = hydratedRules.find((item) => item.id === ruleId);
     if (!rule) return;
     const nextStatus = rule.status === "启用" ? "待补齐" : "启用";
+    const message = await onRecordAction("toggle_rule_status", `切换 ${ruleId} 状态`, "rules", ruleId, { next_status: nextStatus, dataset_path: datasetPath });
     setStatusOverrides((current) => ({ ...current, [ruleId]: nextStatus }));
-    setMessage(`${ruleId} 已切换为${nextStatus}`);
+    setMessage(message);
   }
 
   return (
@@ -1892,8 +1943,8 @@ function RulesLibrarySnapshotPage() {
           <p className="mt-1 text-sm leading-5 text-[#486179]">维护可执行的质检规则，说明来源、检测方法、失败条件和是否需要人工复核。</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setMessage("已打开需求文档导入入口")} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">导入需求文档</button>
-          <button type="button" onClick={() => setMessage("已创建一条草稿规则")} className="h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">新增规则</button>
+          <button type="button" onClick={async () => setMessage(await onRecordAction("import_requirement_document", "导入需求文档", "rules", "requirements", { dataset_path: datasetPath }))} className="h-9 rounded-md border border-[#cfd8e3] bg-white px-4 text-sm font-semibold text-[#16324f] hover:bg-[#f7f9fb]">导入需求文档</button>
+          <button type="button" onClick={async () => setMessage(await onRecordAction("create_rule_draft", "新增规则", "rules", "draft-rule", { dataset_path: datasetPath }))} className="h-9 rounded-md bg-[#0b9a9a] px-4 text-sm font-semibold text-white hover:bg-[#087f7f]">新增规则</button>
         </div>
       </header>
 
@@ -1943,7 +1994,7 @@ function RulesLibrarySnapshotPage() {
                       <span className="truncate text-xs text-[#16324f]">{rule.name}</span>
                     </button>
                     <span className={rule.severity === "高" ? "rounded border border-[#fecdd3] bg-[#fff1f2] px-7 py-1 text-center text-xs font-semibold text-[#dc2626]" : "rounded border border-[#bfdbfe] bg-[#eff6ff] px-7 py-1 text-center text-xs font-semibold text-[#2563eb]"}>{rule.severity}</span>
-                    <button type="button" aria-label={`切换 ${rule.id} 状态`} onClick={() => toggleRuleStatus(rule.id)} className={rule.status === "启用" ? "rounded border border-[#bbf7d0] bg-[#ecfdf3] px-7 py-1 text-xs font-semibold text-[#15803d]" : "rounded border border-[#fed7aa] bg-[#fff7ed] px-5 py-1 text-xs font-semibold text-[#ea580c]"}>{rule.status}</button>
+                    <button type="button" aria-label={`切换 ${rule.id} 状态`} onClick={() => void toggleRuleStatus(rule.id)} className={rule.status === "启用" ? "rounded border border-[#bbf7d0] bg-[#ecfdf3] px-7 py-1 text-xs font-semibold text-[#15803d]" : "rounded border border-[#fed7aa] bg-[#fff7ed] px-5 py-1 text-xs font-semibold text-[#ea580c]"}>{rule.status}</button>
                   </div>
                 );
               })}
@@ -1976,7 +2027,7 @@ function RulesLibrarySnapshotPage() {
                 ))}
               </div>
             </div>
-            <button type="button" onClick={() => setMessage(`${selectedRule.id} 规则说明已保存`)} className="h-9 w-full rounded-md bg-[#0b9a9a] text-sm font-semibold text-white hover:bg-[#087f7f]">保存规则说明</button>
+            <button type="button" onClick={async () => setMessage(await onRecordAction("save_rule_description", "保存规则说明", "rules", selectedRule.id, { rule_id: selectedRule.id }))} className="h-9 w-full rounded-md bg-[#0b9a9a] text-sm font-semibold text-white hover:bg-[#087f7f]">保存规则说明</button>
           </div>
         </aside>
       </main>

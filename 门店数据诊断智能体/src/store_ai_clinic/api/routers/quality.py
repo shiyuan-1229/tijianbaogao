@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse
 
 from store_ai_clinic.config import settings
 from store_ai_clinic.schemas.quality import (
+    QualityActionRecord,
+    QualityActionRequest,
     QualityAssetSummary,
     QualityDatasetScan,
     QualityExportRequest,
@@ -26,8 +28,10 @@ from store_ai_clinic.services.quality import (
     build_quality_export_summary,
     create_export_task,
     list_export_tasks,
+    list_quality_actions,
     list_quality_issues,
     list_review_records,
+    record_quality_action,
     record_review_decision,
     scan_quality_dataset,
 )
@@ -156,6 +160,27 @@ def get_quality_issues(
         issues=[QualityIssue.model_validate(issue) for issue in issues],
     )
 
+
+
+
+@router.get("/actions", response_model=list[QualityActionRecord])
+def get_quality_actions(dataset_path: str | None = None) -> list[QualityActionRecord]:
+    return [QualityActionRecord.model_validate(record) for record in list_quality_actions(dataset_path=dataset_path)]
+
+
+@router.post("/actions", response_model=QualityActionRecord, status_code=201)
+def create_quality_action(request: QualityActionRequest) -> QualityActionRecord:
+    return QualityActionRecord.model_validate(
+        record_quality_action(
+            action=request.action,
+            label=request.label,
+            page=request.page,
+            target=request.target,
+            actor=request.actor,
+            dataset_path=request.dataset_path,
+            payload=request.payload,
+        )
+    )
 
 @router.get("/reviews", response_model=list[QualityReviewRecord])
 def get_quality_reviews(dataset_path: str | None = None) -> list[QualityReviewRecord]:

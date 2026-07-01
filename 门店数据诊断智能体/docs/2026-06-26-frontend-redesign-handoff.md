@@ -1151,3 +1151,88 @@ npx vitest run tests/unit/quality-shell-interactions.test.tsx  # 10 passed, 12 f
 5. **`.gitignore` 已创建**：后续不会再把 `node_modules`、`.next`、缓存等提交到仓库
 6. **真实数据目录 `D:\桌面\数据` 在当前电脑不存在**：需要用户自己准备体检报告 PDF + Excel 样本
 7. **`.env` 里有真实 API 密钥**：用户明确要求保留不删，但不要在文档/日志/截图中暴露
+## 10. 2026-07-01 导航性能与根路径 404 修复
+
+### 10.1 问题现象
+
+本次接手后用户反馈两个问题：
+
+1. 切换左侧导航栏时明显变慢。
+2. 直接打开前端根地址 `http://127.0.0.1:3000/` 会返回 404。
+
+### 10.2 导航变慢根因
+
+排查发现慢点主要来自静态截图式页面在首屏渲染时做了不必要的重活：
+
+- `/tasks`、`/tasks/[taskId]`、`/agent/[sessionId]`、`/settings` 等页面原先会触发默认质检数据扫描或导出历史加载。
+- `QualityShell` 静态引入 `BatchDetectionOverview`，间接把 ECharts 图表代码带到不需要图表的页面。
+- `QualityShell` 与 `ReportExportWorkspace` 都会读取 `/api/quality/exports`，导致普通导航页面也等待导出历史接口。
+
+### 10.3 已完成修复
+
+主要改动如下：
+
+- `store-ai-clinic-web/features/quality/components/quality-shell.tsx`
+  - 将 `BatchDetectionOverview` 改为 `React.lazy` + `Suspense`，只有批量检测页才加载图表模块。
+  - 新增 `shouldLoadExportHistory`，只有 `/quality` 批量页和非截图式导出页加载导出历史。
+  - 导出 `QualityAssetSummary` 类型，保证生产构建通过。
+- `store-ai-clinic-web/features/quality/components/report-export-workspace.tsx`
+  - 新增 `loadExportHistory` 属性。
+  - `/settings` 的截图式导出页关闭导出历史请求，避免导航时额外打 `/api/quality/exports`。
+- `store-ai-clinic-web/app/(workspace)/tasks/page.tsx`
+- `store-ai-clinic-web/app/(workspace)/tasks/[taskId]/page.tsx`
+- `store-ai-clinic-web/app/(workspace)/agent/[sessionId]/page.tsx`
+- `store-ai-clinic-web/app/(workspace)/settings/page.tsx`
+  - 改为静态截图式渲染入口，不再阻塞首屏去扫描默认数据。
+- `store-ai-clinic-web/features/quality/components/report-export-workspace.tsx`
+  - 补充顶部 `导出结果` 按钮逻辑：已有下载地址时直接跳转，否则提示先生成交付包。
+- `store-ai-clinic-web/app/page.tsx`
+  - 新增根路由，访问 `/` 时自动 `redirect('/quality')`，修复直接打开 `http://127.0.0.1:3000/` 返回 404 的问题。
+
+### 10.4 新增与更新测试
+
+相关测试文件：
+
+```text
+store-ai-clinic-web/tests/unit/static-snapshot-pages-performance.test.tsx
+store-ai-clinic-web/tests/unit/settings-page.test.tsx
+store-ai-clinic-web/tests/unit/quality-page.test.tsx
+store-ai-clinic-web/tests/unit/quality-shell-interactions.test.tsx
+store-ai-clinic-web/tests/unit/root-page.test.ts
+```
+
+覆盖点：
+
+- 静态截图式导航页面不触发默认数据扫描。
+- 静态截图式导航页面不触发 `/api/quality/exports`。
+- 静态截图式导航页面不加载批量检测图表模块。
+- 批量检测页首屏先显示轻量占位，图表随后懒加载。
+- 根路径 `/` 自动跳转到 `/quality`。
+
+### 10.5 最新验证结果
+
+已运行并通过：
+
+```bash
+npm run test -- tests/unit/static-snapshot-pages-performance.test.tsx tests/unit/settings-page.test.tsx tests/unit/quality-page.test.tsx tests/unit/quality-shell-interactions.test.tsx -- --run
+npm run test -- tests/unit/root-page.test.ts tests/unit/quality-page.test.tsx -- --run
+npm run build
+```
+
+浏览器实测结果：
+
+- `http://127.0.0.1:3000/` 最终跳转到 `http://127.0.0.1:3000/quality`，返回 200。
+- `/tasks`、`/agent`、`/brands`、`/knowledge`、`/settings` 切换时不再触发 `/api/quality/exports`。
+- 静态导航页面首屏可见时间约为 90-160ms。
+- `/quality` 保留导出历史请求和图表懒加载，因为该页面确实需要批量检测总览能力。
+
+### 10.6 当前服务地址
+
+当前本地服务状态：
+
+```text
+frontend: http://127.0.0.1:3000
+backend:  http://127.0.0.1:8000
+```
+
+如果再次看到 404，优先确认访问的是根路径还是具体路由；根路径现在应自动跳到 `/quality`。

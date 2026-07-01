@@ -18,10 +18,10 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { QualityDatasetScan, QualityIssueData, QualityMetric, QualityPipelineStage } from "@/features/quality/lib/dataset-scanner";
-import { BatchDetectionOverview } from "@/features/quality/components/batch-overview";
+
 import { ReportExportWorkspace } from "@/features/quality/components/report-export-workspace";
 import type { QualityExportTaskResponse } from "@/features/quality/lib/quality-export-types";
 
@@ -77,6 +77,11 @@ export type QualityAssetRecord = {
   missingItems: string[];
 };
 
+const LazyBatchDetectionOverview = lazy(() =>
+  import("@/features/quality/components/batch-overview").then((module) => ({
+    default: module.BatchDetectionOverview,
+  })),
+);
 export type QualityAssetSummary = {
   datasetPath: string;
   scannedAt: string;
@@ -559,8 +564,11 @@ export function QualityShell({
   const [scanPipeline, setScanPipeline] = useState<QualityPipelineStage[]>(dataset?.pipeline ?? []);
   const [scanMetrics, setScanMetrics] = useState<QualityMetric[]>(initialMetrics);
   const [scannedAtLive, setScannedAtLive] = useState<string | null>(null);
+  const shouldLoadExportHistory = view === "batch" || (view === "export" && exportVariant !== "screenshot");
 
   useEffect(() => {
+    if (!shouldLoadExportHistory) return;
+
     let cancelled = false;
     async function loadHistory() {
       try {
@@ -569,14 +577,14 @@ export function QualityShell({
         const data = (await response.json()) as QualityExportTaskResponse[];
         if (!cancelled) setExportHistory(Array.isArray(data) ? data : []);
       } catch {
-        // 历史记录读取失败时静默回退到空状态，不影响主要流程
+        // Keep the main quality workflow usable when export history is unavailable.
       }
     }
     loadHistory();
     return () => {
       cancelled = true;
     };
-  }, [importSummary]);
+  }, [importSummary, shouldLoadExportHistory]);
 
   const baseIssues = (importedIssues ?? (dataset?.issues?.length ? dataset.issues : fallbackIssues)) as QualityIssue[];
   const issueSource = view === "review" && reviewVariant === "screenshot" ? screenshotIssueListIssues : issueListVariant === "screenshot" ? screenshotIssueListIssues : baseIssues;
@@ -767,6 +775,7 @@ export function QualityShell({
         exportSummary={summary}
         disputedCount={allIssues.filter((issue) => issue.status === "disputed").length}
         initialExportHistory={exportHistory}
+        loadExportHistory={shouldLoadExportHistory}
       />
     );
   }
@@ -813,11 +822,13 @@ export function QualityShell({
           {view === "batch" ? <MetricGrid metrics={metrics} /> : null}
           {view === "batch" && assetSummary ? <AssetInventoryPanel assetSummary={assetSummary} /> : null}
           {view === "batch" ? (
-            <BatchDetectionOverview
-              issues={importedIssues ?? baseIssues}
-              assetSummary={assetSummary ?? null}
-              exportHistory={exportHistory}
-            />
+            <Suspense fallback={<div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500">可视化总览加载中...</div>}>
+              <LazyBatchDetectionOverview
+                issues={importedIssues ?? baseIssues}
+                assetSummary={assetSummary ?? null}
+                exportHistory={exportHistory}
+              />
+            </Suspense>
           ) : null}
 
           {view === "detail" && selectedIssue ? (

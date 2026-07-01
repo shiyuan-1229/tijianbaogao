@@ -20,6 +20,7 @@ type ReportExportWorkspaceProps = {
   exportSummary: QualityExportSummary;
   disputedCount?: number;
   initialExportHistory?: QualityExportTaskResponse[];
+  loadExportHistory?: boolean;
 };
 
 function formatExportDate(value: string) {
@@ -61,6 +62,7 @@ export function ReportExportWorkspace({
   exportSummary,
   disputedCount = 0,
   initialExportHistory = [],
+  loadExportHistory = true,
 }: ReportExportWorkspaceProps) {
   const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(exportDeliverables.map((item) => [item, true])),
@@ -75,6 +77,8 @@ export function ReportExportWorkspace({
   }, [initialExportHistory]);
 
   useEffect(() => {
+    if (!loadExportHistory) return;
+
     let cancelled = false;
     async function loadHistory() {
       try {
@@ -90,7 +94,7 @@ export function ReportExportWorkspace({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadExportHistory]);
 
   const selectedCount = exportDeliverables.filter((item) => selectedItems[item]).length;
   const sectionByTitle = useMemo(
@@ -178,6 +182,20 @@ export function ReportExportWorkspace({
             <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
               已选 {selectedCount} / {exportDeliverables.length} 项
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (downloadUrl) {
+                  window.location.href = downloadUrl;
+                  return;
+                }
+                setExportStatus("请先生成交付包，再导出结果。");
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700"
+            >
+              <Download className="h-4 w-4" />
+              导出结果
+            </button>
             {downloadUrl ? (
               <a
                 href={downloadUrl}

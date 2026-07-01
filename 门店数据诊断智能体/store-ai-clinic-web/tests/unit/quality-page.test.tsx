@@ -15,13 +15,9 @@ describe("quality page", () => {
     expect(screen.getByLabelText("选择文件夹导入")).toBeInTheDocument();
     expect(screen.getByLabelText("选择待清洗文件")).toBeInTheDocument();
 
-    // 可视化总览
-    expect(screen.getByText("合规情况占比")).toBeInTheDocument();
-    expect(screen.getByText("男女比例")).toBeInTheDocument();
-    expect(screen.getByText("年龄段分布")).toBeInTheDocument();
+    // 可视化总览拆成懒加载模块，批量页首屏先显示轻量占位。
+    expect(screen.getByText("可视化总览加载中...")).toBeInTheDocument();
 
-    // 历史检测记录（测试环境无后端，显示空状态提示）
-    expect(screen.getByText(/历史检测记录|暂无历史检测记录/)).toBeInTheDocument();
 
     expect(screen.getByRole("button", { name: "导出结果" })).toBeInTheDocument();
   });

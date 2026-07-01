@@ -1377,3 +1377,177 @@ npm test -- tests/unit/quality-shell-interactions.test.tsx
    - 数据集路径是否存在
    - 前端 BFF `/api/quality/exports` 是否返回 JSON，而不是 Next 错误页
 5. 交付包生成不应再触发 PDF 渲染；如果后续改动重新调用 `_default_pdf_page_renderer()`，会导致真实数据集导出再次变慢或超时。
+
+## 12. 2026-07-01 最新分支同步、用户反馈与慢加载问题交接
+
+### 12.1 本轮对话背景
+
+本轮用户连续提出了以下需求和问题：
+
+1. 先阅读项目内所有交接文档与 `agent.md`，确认产品边界和当前交接状态。
+2. 修复“每轮检测”位置没有同步更新的问题，并参考截图做可更新的可视化图形。
+3. 修复其他页面前端不更新的问题，继续检查功能缺失、排版不合适、内容重复、页面信息不清楚的问题。
+4. 拉取队友上传到分支的代码，先暂存用户本地改动，再在保留队友修改的基础上合并用户改动；如出现功能冲突再询问保留哪个。
+5. 用户只上传了一个 PDF，但报告导出界面显示不符合预期，希望只导出新上传文件的分析报告。
+6. “问题清单”页面不要展示证据详情和单份报告问题，应像参考图一样展示所有上传报告的大致情况，点击详情再跳转到单报告详情。
+7. 用户反馈 `/quality` 打开很慢，页面长时间停在“正在打开页面 / 正在准备数据和页面内容。”
+8. 当前最后一个明确请求是：把以上对话写入交接文档。
+
+### 12.2 当前仓库与分支状态
+
+当前工作仓库：
+
+```text
+D:\Github\clone\tijianbaogao
+```
+
+当前分支：
+
+```text
+fix/quality-export-delivery-package
+```
+
+当前分支已和远端对应分支同步。最近一次已推送的关键提交为：
+
+```text
+b8cf275 Merge live quality scan updates
+```
+
+该提交已经把用户本地“实时质检扫描 / 页面随上传数据更新”的改动合并进队友分支 `fix/quality-export-delivery-package`，并成功推送到：
+
+```text
+origin/fix/quality-export-delivery-package
+```
+
+合并过程中曾出现代码冲突，但两边功能是互补关系，因此已保留双方能力，没有丢弃队友修改，也没有覆盖用户修改。若后续再出现“同一功能两套交互逻辑”的真正冲突，需要再向用户确认保留哪一个。
+
+### 12.3 最新已验证测试
+
+在完成合并并推送后，已通过以下前端单元测试：
+
+```bash
+npm.cmd test -- --run tests/unit/quality-shell-interactions.test.tsx tests/unit/quality-page.test.tsx tests/unit/tasks-page.test.tsx tests/unit/agent-page.test.tsx tests/unit/inspection-redesign.test.tsx tests/unit/settings-page.test.tsx
+```
+
+结果：
+
+```text
+6 files passed
+34 tests passed
+```
+
+### 12.4 当前工作区注意事项
+
+当前工作区还有未跟踪的运行数据，属于用户真实操作/导入产生的本地数据，不要提交：
+
+```text
+门店数据诊断智能体/data/quality/imports/quality-import-*
+门店数据诊断智能体/data/quality/review-records.jsonl
+```
+
+这些文件目前应继续保持未跟踪状态，除非用户明确要求把某些样例数据纳入仓库。
+
+当前还保留了若干历史 stash，作为安全备份，不要主动删除：
+
+```text
+stash@{0}: On main: codex-local-before-merge-fix-quality-export-2026-07-01
+stash@{1}: On main: codex-temp-before-sync-2026-07-01
+stash@{2}: On main: codex-temp-before-pull-2026-07-01
+stash@{3}: On main: 本地改动：批量检测重设计、store 持久化、客户端组件化
+```
+
+### 12.5 `/quality` 慢加载问题诊断
+
+用户最新反馈是 `/quality` 页面加载很慢，截图中页面卡在：
+
+```text
+正在打开页面
+正在准备数据和页面内容。
+```
+
+已确认主要原因在于 `/quality` 首屏仍被服务端异步数据加载阻塞。当前入口文件为：
+
+```text
+门店数据诊断智能体/store-ai-clinic-web/app/(workspace)/quality/page.tsx
+```
+
+当前逻辑大致是：
+
+```tsx
+import { QualityShell } from "@/features/quality/components/quality-shell";
+import { loadDefaultQualityAssets } from "@/features/quality/lib/default-assets";
+import { loadDefaultQualityDataset } from "@/features/quality/lib/default-dataset";
+import { loadDefaultQualityRules } from "@/features/quality/lib/default-rules";
+
+export default async function QualityPage() {
+  const [dataset, rules, assetSummary] = await Promise.all([
+    loadDefaultQualityDataset(),
+    loadDefaultQualityRules(),
+    loadDefaultQualityAssets(),
+  ]);
+
+  return <QualityShell view="batch" dataset={dataset} rules={rules} assetSummary={assetSummary} liveFromStore />;
+}
+```
+
+慢点包括：
+
+- `loadDefaultQualityDataset()` 会调用默认数据集扫描逻辑，真实目录或文件较多时会阻塞 `/quality` 首屏。
+- `loadDefaultQualityRules()` 和 `loadDefaultQualityAssets()` 会走后端 API，并使用 `cache: "no-store"` 与超时逻辑，仍会增加首屏等待。
+- 当前没有 `app/(workspace)/quality/loading.tsx`，因此用户只能看到通用路由加载提示，感知上更慢。
+
+### 12.6 建议的快速修复方案
+
+优先级最高、风险最低的修复是：让 `/quality` 首屏先渲染轻量客户端壳，不再等待默认数据集、规则和资产扫描。
+
+建议把：
+
+```text
+门店数据诊断智能体/store-ai-clinic-web/app/(workspace)/quality/page.tsx
+```
+
+改成：
+
+```tsx
+import { QualityShell } from "@/features/quality/components/quality-shell";
+
+export default function QualityPage() {
+  return <QualityShell view="batch" liveFromStore />;
+}
+```
+
+这样 `/quality` 会立即显示页面；如果 Zustand 全局 store 里已有用户刚上传/刚扫描的数据，`liveFromStore` 会继续接管并展示最新状态。默认数据集扫描可以后续改成客户端后台懒加载或单独 API，不应继续阻塞首屏。
+
+可选增强：
+
+```text
+门店数据诊断智能体/store-ai-clinic-web/app/(workspace)/quality/loading.tsx
+```
+
+新增一个更贴近质检工作台风格的 loading skeleton。注意：仅新增 `loading.tsx` 只能改善等待观感，不能从根上解决服务端扫描阻塞；真正的性能修复仍是移除首屏 await。
+
+### 12.7 建议验证命令
+
+完成慢加载修复后，优先运行：
+
+```bash
+npm.cmd test -- --run tests/unit/quality-page.test.tsx tests/unit/quality-shell-interactions.test.tsx tests/unit/static-snapshot-pages-performance.test.tsx
+```
+
+如果通过，再运行之前合并时用过的相关套件：
+
+```bash
+npm.cmd test -- --run tests/unit/quality-shell-interactions.test.tsx tests/unit/quality-page.test.tsx tests/unit/tasks-page.test.tsx tests/unit/agent-page.test.tsx tests/unit/inspection-redesign.test.tsx tests/unit/settings-page.test.tsx
+```
+
+如测试仍假设 `/quality` 必须在服务端预载默认数据，需要把断言更新为“首屏快速渲染 + live store 数据优先”的产品行为。
+
+### 12.8 后续产品待办
+
+还有几项用户已经明确提到、但尚未完整落地的产品方向：
+
+1. 报告导出页需要更明确地区分“当前新上传文件的分析报告”和“历史/默认数据集交付包”，避免用户只上传一个 PDF 时看到与当前上传无关的导出项。
+2. 问题清单页应改成批次级概览，不应默认展示右侧证据详情和某一份报告的细节；点击“详情”后再跳转到单报告详情页。
+3. 批量检测页的可视化应继续围绕“所有上传报告的大致情况”更新，包括合规/不合规/待审核占比、文件数、性别比例、年龄段分布、历史检测记录等。
+4. 其他页面需要继续检查是否仍有旧 mock、旧默认数据、旧截图式信息或重复内容导致用户误解当前真实上传状态。
+5. 如后续实现默认数据后台加载，要确保不会覆盖用户刚上传的数据，优先级应为：用户当前上传/扫描结果 > 本地持久化 live store > 默认示例数据。

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>批次质检总报告</title>
+  <style>
+    body { margin: 0; background: #f5f7fb; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 56px; }
+    .hero { background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .eyebrow { margin: 0 0 8px; color: #0b8b8b; font-weight: 700; font-size: 13px; }
+    h1 { margin: 0 0 12px; font-size: 28px; line-height: 1.25; }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    section, article.issue { background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 20px; margin-top: 14px; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; background: transparent; border: 0; padding: 0; }
+    .metric { background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 16px; }
+    .metric span { display: block; color: #64748b; font-size: 13px; }
+    .metric strong { display: block; margin-top: 8px; font-size: 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-bottom: 1px solid #e5e7eb; padding: 10px 8px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; color: #334155; }
+    a { color: #0b8b8b; font-weight: 700; }
+    .steps li { margin: 8px 0; }
+    dl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 14px; margin: 0; }
+    dt { color: #64748b; font-weight: 700; }
+    dd { margin: 0; }
+  </style>
+</head>
+<body><main>
+    <section class="hero">
+      <p class="eyebrow">客户阅读版</p>
+      <h1>批次质检总报告</h1>
+      <p>数据集：<strong>data\quality\imports\quality-import-79d029f44da8</strong></p>
+    </section>
+    <section class="metrics">
+      <div class='metric'><span>档案数</span><strong>1</strong></div>
+      <div class='metric'><span>PDF</span><strong>1</strong></div>
+      <div class='metric'><span>Excel</span><strong>0</strong></div>
+      <div class='metric'><span>总问题</span><strong>1</strong></div>
+      <div class='metric'><span>已确认不合规</span><strong>0</strong></div>
+      <div class='metric'><span>可能合规</span><strong>0</strong></div>
+      <div class='metric'><span>待复核</span><strong>1</strong></div>
+      <div class='metric'><span>复核记录</span><strong>0</strong></div>
+    </section>
+    <section>
+      <h2>本批次结论</h2>
+      <p>本报告用于说明当前数据集中体检报告的质检结果。已确认不合规和待复核项目需要客户重点查看；可能合规项目保留为复核参考。</p>
+    </section>
+    <section>
+      <h2>问题分类统计</h2>
+      <ul><li>内容完整性：1</li></ul>
+    </section>
+    <section>
+      <h2>高风险问题摘要</h2>
+      <ul><li>暂无高风险问题。</li></ul>
+    </section>
+    <section>
+      <h2>不合规与待复核报告清单</h2>
+      <table>
+        <thead><tr><th>报告文件</th><th>档案号</th><th>页码</th><th>命中规则</th><th>严重程度</th><th>证据说明</th></tr></thead>
+        <tbody><tr><td>02250201.pdf</td><td>02250201</td><td>1</td><td>R-OCR-001</td><td>中</td><td>已保留 PDF 文件、页数和路径证据，等待 OCR 或视觉模型生成页面级文字证据。</td></tr></tbody>
+      </table>
+    </section>
+    <section>
+      <h2>规则命中统计</h2>
+      <table><thead><tr><th>规则 ID</th><th>规则名称</th><th>命中次数</th></tr></thead><tbody><tr><td>R-OCR-001</td><td>R-OCR-001</td><td>1</td></tr></tbody></table>
+    </section>
+    </main></body>
+</html>

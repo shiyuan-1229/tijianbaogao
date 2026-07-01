@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>交付包说明</title>
+  <style>
+    body { margin: 0; background: #f5f7fb; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+    main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 56px; }
+    .hero { background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .eyebrow { margin: 0 0 8px; color: #0b8b8b; font-weight: 700; font-size: 13px; }
+    h1 { margin: 0 0 12px; font-size: 28px; line-height: 1.25; }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    section, article.issue { background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 20px; margin-top: 14px; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; background: transparent; border: 0; padding: 0; }
+    .metric { background: #ffffff; border: 1px solid #d9e0e8; border-radius: 8px; padding: 16px; }
+    .metric span { display: block; color: #64748b; font-size: 13px; }
+    .metric strong { display: block; margin-top: 8px; font-size: 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { border-bottom: 1px solid #e5e7eb; padding: 10px 8px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; color: #334155; }
+    a { color: #0b8b8b; font-weight: 700; }
+    .steps li { margin: 8px 0; }
+    dl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 14px; margin: 0; }
+    dt { color: #64748b; font-weight: 700; }
+    dd { margin: 0; }
+  </style>
+</head>
+<body><main>
+    <section class="hero">
+      <p class="eyebrow">体检报告质检交付包</p>
+      <h1>quality-import-79d029f44da8 客户交付说明</h1>
+      <p>本交付包生成于 2026-07-01 06:59:07，对应数据集：<strong>data\quality\imports\quality-import-79d029f44da8</strong></p>
+    </section>
+    <section class="metrics">
+      <div class='metric'><span>年龄段</span><strong>0</strong></div>
+      <div class='metric'><span>档案数</span><strong>1</strong></div>
+      <div class='metric'><span>PDF</span><strong>1</strong></div>
+      <div class='metric'><span>Excel</span><strong>0</strong></div>
+      <div class='metric'><span>总问题</span><strong>1</strong></div>
+      <div class='metric'><span>已确认不合规</span><strong>0</strong></div>
+      <div class='metric'><span>可能合规</span><strong>0</strong></div>
+      <div class='metric'><span>待复核</span><strong>1</strong></div>
+    </section>
+    <section>
+      <h2>客户阅读顺序</h2>
+      <ol class="steps">
+        <li><a href="01-批次质检总报告.html">先看 01-批次质检总报告.html</a>：了解本批次整体结论、问题分布和高风险摘要。</li>
+        <li><a href="02-逐份报告问题说明/">再看 02-逐份报告问题说明</a>：按报告文件逐份查看问题、页码、规则和处理建议。</li>
+        <li>需要复核原始数据时，再打开 Excel、问题清单、合格 PDF 等附属文件夹。</li>
+      </ol>
+    </section>
+    <section>
+      <h2>交付包内容</h2>
+      <table>
+        <thead><tr><th>位置</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>01-批次质检总报告.html</td><td>客户阅读版总报告。</td></tr>
+          <tr><td>02-逐份报告问题说明/</td><td>每一份问题报告的单独说明。</td></tr>
+          <tr><td>批次总体情况表/</td><td>可筛选的 Excel 汇总表。</td></tr>
+          <tr><td>问题详情分析报告/</td><td>原始 Markdown 明细，便于内部留档。</td></tr>
+          <tr><td>export-summary.json</td><td>系统接口可读的摘要数据。</td></tr>
+        </tbody>
+      </table>
+    </section>
+    </main></body>
+</html>

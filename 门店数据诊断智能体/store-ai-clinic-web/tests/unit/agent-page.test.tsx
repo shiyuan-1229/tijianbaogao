@@ -19,8 +19,7 @@ describe("agent page", () => {
     render(await AgentPage());
 
     expect(screen.getByRole("heading", { name: "单报告详情" })).toBeInTheDocument();
-    expect(screen.getByText("查看报告证据、AI 判断、规则依据和人工复核动作。")).toBeInTheDocument();
-    expect(screen.getByText("报告问题明细")).toBeInTheDocument();
+    expect(screen.getByText("单份报告明细")).toBeInTheDocument();
     expect(screen.getAllByText("谷丙转氨酶疑似缺字，需要人工复核页面原图。").length).toBeGreaterThan(0);
 
     const evidencePanel = screen.getByLabelText("当前问题证据");
@@ -39,6 +38,7 @@ describe("agent page", () => {
     expect(screen.getByRole("heading", { name: "单报告详情" })).toBeInTheDocument();
     expect(screen.getByLabelText("当前问题证据")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认问题" })).toBeInTheDocument();
+    expect(screen.getByText("单份报告明细")).toBeInTheDocument();
     expect(screen.queryByText("会话列表")).not.toBeInTheDocument();
   });
 });

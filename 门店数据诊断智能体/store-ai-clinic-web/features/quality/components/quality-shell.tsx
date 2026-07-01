@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Check,
   ChevronDown,
@@ -27,7 +28,7 @@ import type { QualityExportTaskResponse } from "@/features/quality/lib/quality-e
 import { useQualityScanStore } from "@/shared/store/quality-scan-store";
 
 export type QualityWorkspaceView = "batch" | "issues" | "detail" | "review" | "rules" | "export";
-type IssueListVariant = "default" | "screenshot";
+type IssueListVariant = "default" | "screenshot" | "summary";
 type ReportDetailVariant = "default" | "screenshot";
 type ReviewVariant = "default" | "screenshot";
 type RulesVariant = "default" | "screenshot";
@@ -129,6 +130,16 @@ type ImportedQualityFile = {
   size: number;
   type?: string;
   saved_path?: string;
+};
+
+type QualityFileSummary = {
+  fileName: string;
+  group: string;
+  gender: string;
+  pageCount: string;
+  statusLabel: "合格" | "警告" | "不合格";
+  suggestionLabel: "可直接使用" | "需复核" | "建议剔除";
+  detailHref: string;
 };
 
 type QualityImportResponse = {
@@ -523,6 +534,7 @@ export function QualityShell({
   reviewVariant = "default",
   rulesVariant = "default",
   exportVariant = "default",
+  detailFileName,
   liveFromStore = false,
 }: {
   view?: QualityWorkspaceView;
@@ -535,6 +547,7 @@ export function QualityShell({
   reviewVariant?: ReviewVariant;
   rulesVariant?: RulesVariant;
   exportVariant?: ExportVariant;
+  detailFileName?: string;
   liveFromStore?: boolean;
 }) {
   const meta = viewMeta[view];
@@ -658,6 +671,13 @@ export function QualityShell({
     () => issueSource.map((issue) => ({ ...issue, status: reviewedStatuses[issue.id] ?? issue.status })),
     [issueSource, reviewedStatuses],
   );
+  const detailScopedIssues = useMemo(() => {
+    if (view !== "detail" || !detailFileName) return allIssues;
+    const normalizedFileName = normalizeFileToken(detailFileName);
+    const matches = allIssues.filter((issue) => normalizeFileToken(issue.fileName) === normalizedFileName);
+    return matches;
+  }, [allIssues, detailFileName, view]);
+  const issueScope = view === "detail" ? detailScopedIssues : allIssues;
   const summary = useMemo(() => {
     const shouldUseLiveSummary =
       liveFromStore &&
@@ -673,28 +693,41 @@ export function QualityShell({
       });
     }
 
-    return exportSummary ?? fallbackExportSummary;
+    return (
+      exportSummary ??
+      buildExportSummaryFromIssues({
+        datasetPath: activeDatasetPath,
+        issues: allIssues,
+        importSummary,
+        scannedAt: scannedAtLive ?? dataset?.scannedAt ?? null,
+      })
+    );
   }, [activeDatasetPath, allIssues, dataset?.scannedAt, exportSummary, importSummary, liveFromStore, scannedAtLive]);
 
   const filteredIssues = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return allIssues.filter((issue) => {
+    return issueScope.filter((issue) => {
       const searchable = `${issue.fileName} ${issue.issueType} ${issue.evidence} ${issue.ruleId} ${issueTypeLabel(issue)}`.toLowerCase();
       const matchesCategory = selectedFilter === "all" || issue.category === selectedFilter;
       const matchesSeverity = selectedSeverity === "all" || issue.severity === selectedSeverity;
       const matchesStatus = selectedStatus === "all" || issue.status === selectedStatus;
       return matchesCategory && matchesSeverity && matchesStatus && (!normalizedQuery || searchable.includes(normalizedQuery));
     });
-  }, [allIssues, query, selectedFilter, selectedSeverity, selectedStatus]);
+  }, [issueScope, query, selectedFilter, selectedSeverity, selectedStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filteredIssues.length / ISSUE_PAGE_SIZE));
   const effectiveCurrentPage = Math.min(currentPage, totalPages);
   const pagedIssues = filteredIssues.slice((effectiveCurrentPage - 1) * ISSUE_PAGE_SIZE, effectiveCurrentPage * ISSUE_PAGE_SIZE);
   const selectedIssue =
     filteredIssues.find((issue) => issue.id === selectedIssueId) ??
-    allIssues.find((issue) => issue.id === selectedIssueId) ??
+    issueScope.find((issue) => issue.id === selectedIssueId) ??
     filteredIssues[0] ??
-    allIssues[0];
+    issueScope[0];
+  const selectedImportedFile = useMemo(() => {
+    if (view !== "detail" || !detailFileName || !importSummary) return null;
+    const normalizedFileName = normalizeFileToken(detailFileName);
+    return importSummary.files.find((file) => normalizeFileToken(file.name) === normalizedFileName) ?? null;
+  }, [detailFileName, importSummary, view]);
 
   async function recordQualityAction(
     action: string,
@@ -731,16 +764,16 @@ export function QualityShell({
   }
 
   useEffect(() => {
-    if (!allIssues.length) return;
-    if (allIssues.some((issue) => issue.id === selectedIssueId)) return;
-    const primary = selectPrimaryImportedIssue(allIssues);
+    if (!issueScope.length) return;
+    if (issueScope.some((issue) => issue.id === selectedIssueId)) return;
+    const primary = selectPrimaryImportedIssue(issueScope);
     if (!primary) return;
     setSelectedIssueId(primary.id);
     setActivePreviewPage(pageNumberFromIssue(primary));
-  }, [allIssues, selectedIssueId]);
+  }, [issueScope, selectedIssueId]);
 
   function handleSelectIssue(issueId: string) {
-    const nextIssue = allIssues.find((issue) => issue.id === issueId) ?? filteredIssues.find((issue) => issue.id === issueId);
+    const nextIssue = issueScope.find((issue) => issue.id === issueId) ?? filteredIssues.find((issue) => issue.id === issueId);
     setSelectedIssueId(issueId);
     setIsEvidenceOpen(true);
     setReviewFeedback("");
@@ -917,6 +950,15 @@ export function QualityShell({
     );
   }
 
+  if (view === "issues" && issueListVariant === "summary") {
+    return (
+      <IssueFileSummaryPage
+        summaries={buildFileSummaries(issueScope, importSummary)}
+        operationMessage={operationMessage}
+      />
+    );
+  }
+
   if (view === "detail" && reportDetailVariant === "screenshot") {
     return <SingleReportDetailSnapshotPage operationMessage={operationMessage} onRecordAction={recordQualityAction} />;
   }
@@ -948,6 +990,122 @@ export function QualityShell({
         disputedCount={allIssues.filter((issue) => issue.status === "disputed").length}
         initialExportHistory={exportHistory}
       />
+    );
+  }
+
+  if (view === "detail") {
+    return (
+      <div className="min-h-full bg-[#f5f7fb] text-[#202733]">
+        <TopToolbar
+          title={meta.title}
+          isPaused={isPaused}
+          operationMessage={operationMessage}
+          onTogglePause={() => {
+            setIsPaused((current) => !current);
+            setOperationMessage(isPaused ? "任务已继续运行。" : "任务已暂停，当前结果保持可复核。");
+          }}
+          onRerun={() => setOperationMessage("已重新运行检测流程。")}
+          onExport={() => void handleToolbarExport()}
+        />
+
+        <main className="space-y-4 p-4">
+          <DatasetToolbar
+            datasetPath={displayDatasetPath}
+            scannedAt={scannedAt}
+            ageGroupCount={metricValue(metrics, "年龄段")}
+            isOpen={isDatasetMenuOpen}
+            onToggle={() => setIsDatasetMenuOpen((current) => !current)}
+            onSelect={(label) => {
+              setDisplayDatasetPath(label === "历史对比样本" ? "D:/桌面/数据/历史对比样本" : "D:/桌面/数据/5人");
+              setIsDatasetMenuOpen(false);
+              setOperationMessage(`已切换数据集：${label}`);
+            }}
+          />
+
+          <section
+            className="grid gap-4"
+            style={isEvidenceOpen ? { gridTemplateColumns: "minmax(0, 1fr) minmax(340px, 420px)" } : undefined}
+          >
+            <div className="min-w-0 space-y-4 xl:resize-x xl:overflow-auto">
+              {!isEvidenceOpen ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsEvidenceOpen(true)}
+                    className="inline-flex h-9 items-center justify-center rounded-md border border-[#0b9a9a] bg-white px-3 text-sm font-semibold text-[#0b8b8b] hover:bg-[#f0fdfa]"
+                  >
+                    打开证据详情
+                  </button>
+                </div>
+              ) : null}
+              {selectedIssue ? (
+                <ReportEvidenceWorkspace
+                  selectedIssue={selectedIssue}
+                  activePage={activePreviewPage}
+                  onSelectPage={setActivePreviewPage}
+                />
+              ) : selectedImportedFile && importSummary ? (
+                <ImportedFilePreviewWorkspace
+                  file={selectedImportedFile}
+                  taskId={importSummary.task_id}
+                />
+              ) : (
+                <DetailEmptyState />
+              )}
+
+              <IssuePanel
+                title="单份报告明细"
+                subtitle="只展示当前报告的问题、证据摘要和处理状态。"
+                issues={pagedIssues}
+                allIssues={filteredIssues}
+                totalIssues={filteredIssues.length}
+                selectedIssueId={selectedIssue?.id}
+                query={query}
+                selectedFilter={selectedFilter}
+                selectedSeverity={selectedSeverity}
+                selectedStatus={selectedStatus}
+                openFilterMenu={openFilterMenu}
+                currentPage={effectiveCurrentPage}
+                totalPages={totalPages}
+                tableMinWidthClass="min-w-[1320px]"
+                onQueryChange={(value) => {
+                  setQuery(value);
+                  setCurrentPage(1);
+                }}
+                onSelectFilter={(value) => {
+                  setSelectedFilter(value);
+                  setCurrentPage(1);
+                }}
+                onSelectSeverity={(value) => {
+                  setSelectedSeverity(value);
+                  setCurrentPage(1);
+                  setOpenFilterMenu(null);
+                }}
+                onSelectStatus={(value) => {
+                  setSelectedStatus(value);
+                  setCurrentPage(1);
+                  setOpenFilterMenu(null);
+                }}
+                onToggleFilterMenu={setOpenFilterMenu}
+                onSelectPage={setCurrentPage}
+                onSelectIssue={handleSelectIssue}
+              />
+            </div>
+
+            {selectedIssue && isEvidenceOpen ? (
+              <EvidencePanel
+                issue={selectedIssue}
+                activePage={activePreviewPage}
+                view={view}
+                reviewFeedback={reviewFeedback}
+                onPreviewPageChange={setActivePreviewPage}
+                onClose={() => setIsEvidenceOpen(false)}
+                onReviewDecision={recordReviewDecision}
+              />
+            ) : null}
+          </section>
+        </main>
+      </div>
     );
   }
 
@@ -1378,6 +1536,85 @@ function IssueListSnapshotPage({ issues, totalIssues, selectedIssue, selectedIss
   );
 }
 
+function IssueFileSummaryPage({ summaries, operationMessage }: { summaries: QualityFileSummary[]; operationMessage: string }) {
+  return (
+    <div className="min-h-full bg-[#f5f7fb] text-[#111827]">
+      <header className="border-b border-[#d9e0e8] bg-white px-6 py-4">
+        <h1 className="text-xl font-semibold leading-6 text-[#111827]">问题清单</h1>
+        <p className="mt-1 text-sm leading-5 text-[#486179]">这里先看每个文件的大概情况，具体问题和证据统一进入单报告详情查看。</p>
+      </header>
+
+      {operationMessage ? <div role="status" className="border-b border-[#d9e0e8] bg-[#ecfeff] px-6 py-2 text-sm font-semibold text-[#0f766e]">{operationMessage}</div> : null}
+
+      <main className="p-4">
+        <section className="overflow-hidden rounded-lg border border-[#d9e0e8] bg-white">
+          <div className="overflow-x-auto">
+            <table className="min-w-[980px] text-sm">
+              <thead className="bg-[#f8fafc] text-left text-[#5e6978]">
+                <tr>
+                  <th className="px-6 py-4 font-medium">文件名</th>
+                  <th className="px-4 py-4 font-medium">年龄组</th>
+                  <th className="px-4 py-4 font-medium">性别</th>
+                  <th className="px-4 py-4 font-medium">页数</th>
+                  <th className="px-4 py-4 font-medium">状态</th>
+                  <th className="px-4 py-4 font-medium">操作建议</th>
+                  <th className="px-4 py-4 text-right font-medium">详情</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaries.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-[#5e6978]">
+                      当前还没有可展示的文件概况，请先导入并完成数据清洗。
+                    </td>
+                  </tr>
+                ) : summaries.map((summary) => (
+                  <tr key={summary.fileName} className="border-t border-[#e6ebf1]">
+                    <td className="px-6 py-4 font-semibold text-[#4f46e5]">{summary.fileName}</td>
+                    <td className="px-4 py-4 text-[#202733]">{summary.group}</td>
+                    <td className="px-4 py-4 text-[#202733]">{summary.gender}</td>
+                    <td className="px-4 py-4 text-[#202733]">{summary.pageCount}</td>
+                    <td className="px-4 py-4"><FileSummaryStatusBadge label={summary.statusLabel} /></td>
+                    <td className="px-4 py-4"><FileSummarySuggestionBadge label={summary.suggestionLabel} /></td>
+                    <td className="px-4 py-4 text-right">
+                      <Link
+                        href={summary.detailHref}
+                        className="inline-flex h-9 items-center justify-center rounded-md border border-[#4f46e5] px-3 text-sm font-semibold text-[#4f46e5] hover:bg-[#eef2ff]"
+                      >
+                        详情
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function FileSummaryStatusBadge({ label }: { label: QualityFileSummary["statusLabel"] }) {
+  const className =
+    label === "合格"
+      ? "border-[#bbf7d0] bg-[#ecfdf3] text-[#15803d]"
+      : label === "警告"
+        ? "border-[#fde68a] bg-[#fffbeb] text-[#d97706]"
+        : "border-[#fecdd3] bg-[#fff1f2] text-[#dc2626]";
+  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>{label}</span>;
+}
+
+function FileSummarySuggestionBadge({ label }: { label: QualityFileSummary["suggestionLabel"] }) {
+  const className =
+    label === "可直接使用"
+      ? "border-[#ccfbf1] bg-[#ecfeff] text-[#0f766e]"
+      : label === "需复核"
+        ? "border-[#fef3c7] bg-[#fffbeb] text-[#d97706]"
+        : "border-[#fecdd3] bg-[#fff1f2] text-[#ef4444]";
+  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>{label}</span>;
+}
+
 function IssueStatCard({ title, value, description }: { title: string; value: string; description: string }) {
   return (
     <div className="min-h-[112px] rounded-lg border border-[#d9e0e8] bg-white px-4 py-4">
@@ -1489,7 +1726,7 @@ function TriageSummaryPanel({ issue, onOpenDetail }: { issue?: QualityIssue; onO
     </aside>
   );
 }
-function IssuePanel({ title, subtitle, issues, allIssues, totalIssues, selectedIssueId, query, selectedFilter, selectedSeverity, selectedStatus, openFilterMenu, currentPage, totalPages, onQueryChange, onSelectFilter, onSelectSeverity, onSelectStatus, onToggleFilterMenu, onSelectPage, onSelectIssue }: { title: string; subtitle: string; issues: QualityIssue[]; allIssues: QualityIssue[]; totalIssues: number; selectedIssueId?: string; query: string; selectedFilter: IssueCategory; selectedSeverity: SeverityFilter; selectedStatus: StatusFilter; openFilterMenu: FilterMenuKey; currentPage: number; totalPages: number; onQueryChange: (value: string) => void; onSelectFilter: (value: IssueCategory) => void; onSelectSeverity: (value: SeverityFilter) => void; onSelectStatus: (value: StatusFilter) => void; onToggleFilterMenu: (value: FilterMenuKey) => void; onSelectPage: (page: number) => void; onSelectIssue: (id: string) => void; }) {
+function IssuePanel({ title, subtitle, issues, allIssues, totalIssues, selectedIssueId, query, selectedFilter, selectedSeverity, selectedStatus, openFilterMenu, currentPage, totalPages, tableMinWidthClass = "min-w-full", onQueryChange, onSelectFilter, onSelectSeverity, onSelectStatus, onToggleFilterMenu, onSelectPage, onSelectIssue }: { title: string; subtitle: string; issues: QualityIssue[]; allIssues: QualityIssue[]; totalIssues: number; selectedIssueId?: string; query: string; selectedFilter: IssueCategory; selectedSeverity: SeverityFilter; selectedStatus: StatusFilter; openFilterMenu: FilterMenuKey; currentPage: number; totalPages: number; tableMinWidthClass?: string; onQueryChange: (value: string) => void; onSelectFilter: (value: IssueCategory) => void; onSelectSeverity: (value: SeverityFilter) => void; onSelectStatus: (value: StatusFilter) => void; onToggleFilterMenu: (value: FilterMenuKey) => void; onSelectPage: (page: number) => void; onSelectIssue: (id: string) => void; }) {
   const fileButtonNames = uniqueFileButtonNames(issues);
   return (
     <section className="overflow-hidden rounded-lg border border-[#dfe4ea] bg-white">
@@ -1533,7 +1770,7 @@ function IssuePanel({ title, subtitle, issues, allIssues, totalIssues, selectedI
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
+        <table className={`${tableMinWidthClass} text-sm`}>
           <thead className="bg-[#f8fafc] text-left text-[#5e6978]">
             <tr>
               <th className="w-10 px-4 py-3"><input aria-label="全选问题" type="checkbox" className="h-4 w-4 rounded border-[#cbd5e1]" /></th>
@@ -1596,7 +1833,7 @@ function EvidencePanel({ issue, activePage, view, reviewFeedback, onPreviewPageC
   const issuePage = pageNumberFromIssue(issue);
   const shouldShowMarker = Boolean(issue.bbox) && (issue.page === "图片" || activePage === issuePage);
   return (
-    <aside aria-label="当前问题证据" className="overflow-hidden rounded-lg border border-[#dfe4ea] bg-white">
+    <aside aria-label="当前问题证据" className="resize-x overflow-auto rounded-lg border border-[#dfe4ea] bg-white">
       <div className="flex items-center justify-between border-b border-[#eef2f6] px-4 py-3">
         <h2 className="text-lg font-semibold text-[#151922]">证据详情</h2>
         <button type="button" aria-label="关闭证据详情" onClick={onClose} className="rounded p-1 text-[#5e6978] hover:bg-[#f2f5f8]"><X aria-hidden="true" className="h-4 w-4" /></button>
@@ -1923,16 +2160,102 @@ function DetailEvidenceCard({ title, children }: { title: string; children: Reac
     </div>
   );
 }
-function ReportEvidenceWorkspace({ selectedIssue, activePage, onSelectPage }: { selectedIssue: QualityIssue; activePage: number; onSelectPage: (page: number) => void }) {
+
+function ReportEvidenceWorkspace({
+  selectedIssue,
+  activePage,
+  onSelectPage,
+}: {
+  selectedIssue: QualityIssue;
+  activePage: number;
+  onSelectPage: (page: number) => void;
+}) {
   const pageCount = previewPageCountForIssue(selectedIssue);
+  const previewSrc = previewImageForPage(selectedIssue, activePage);
   return (
-    <section className="rounded-lg border border-[#dfe4ea] bg-white p-4">
+    <section className="resize-y overflow-auto rounded-lg border border-[#dfe4ea] bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div><h2 className="text-lg font-semibold text-[#151922]">体检报告页面预览</h2><p className="mt-1 text-sm text-[#5e6978]">{selectedIssue.fileName}</p></div>
         <div className="grid grid-cols-3 gap-2"><EvidenceWorkspaceStat label="当前页" value={String(activePage)} /><EvidenceWorkspaceStat label="类型" value={issueTypeLabel(selectedIssue)} /><EvidenceWorkspaceStat label="状态" value={statusLabels[selectedIssue.status]} /></div>
       </div>
-      <div className="mt-4 flex aspect-[16/9] items-center justify-center rounded-lg border border-dashed border-[#c9d4e0] bg-[#f8fafc] px-4 text-center text-sm text-[#5e6978]">已保留单报告页面证据，可在人工复核时放大查看。</div>
+      <div className="mt-4 rounded-lg border border-[#d9e0e8] bg-[#f8fafc] p-2">
+        <div className="flex items-center justify-between border-b border-[#e5e7eb] px-2 py-1 text-xs text-[#475467]">
+          <span>100%</span>
+          {pageCount > 1 ? (
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => onSelectPage(Math.max(1, activePage - 1))} className="rounded border border-[#d9e0e8] px-2 py-1">上一页</button>
+              <button type="button" onClick={() => onSelectPage(Math.min(pageCount, activePage + 1))} className="rounded border border-[#d9e0e8] px-2 py-1">下一页</button>
+            </div>
+          ) : null}
+        </div>
+        <div className="relative mt-2 overflow-hidden rounded border border-[#d9e0e8] bg-white" style={{ minHeight: "480px" }}>
+          <div className="flex h-full items-center justify-center p-4">
+            {previewSrc ? (
+              <img
+                src={previewSrc}
+                alt={pageCount > 1 ? `${selectedIssue.fileName} 第 ${activePage} 页预览` : `${selectedIssue.fileName} 预览`}
+                className="max-h-full w-full object-contain"
+              />
+            ) : (
+              <MockReportPage />
+            )}
+          </div>
+        </div>
+      </div>
       {pageCount > 1 ? <div className="mt-4 flex flex-wrap gap-2">{Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => <button key={page} type="button" onClick={() => onSelectPage(page)} className={page === activePage ? "rounded-md bg-[#0b9a9a] px-3 py-1.5 text-sm font-medium text-white" : "rounded-md border border-[#ccd5df] px-3 py-1.5 text-sm text-[#344054]"}>第 {page} 页</button>)}</div> : null}
+    </section>
+  );
+}
+
+function ImportedFilePreviewWorkspace({
+  file,
+  taskId,
+}: {
+  file: ImportedQualityFile;
+  taskId: string;
+}) {
+  const previewUrl = buildImportedFilePreviewUrl(taskId, file.name);
+  const isPdf = file.name.toLowerCase().endsWith(".pdf");
+  const isImage = isImageFile(file.name);
+
+  return (
+    <section className="resize-y overflow-auto rounded-lg border border-[#dfe4ea] bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-[#151922]">当前文件预览</h2>
+          <p className="mt-1 text-sm text-[#5e6978]">{file.name}</p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <EvidenceWorkspaceStat label="文件类型" value={isPdf ? "PDF" : isImage ? "图片" : "其他"} />
+          <EvidenceWorkspaceStat label="问题数" value="0" />
+          <EvidenceWorkspaceStat label="状态" value="未发现问题" />
+        </div>
+      </div>
+      <div className="mt-4 rounded-lg border border-[#d9e0e8] bg-[#f8fafc] p-2">
+        <div className="relative mt-2 overflow-hidden rounded border border-[#d9e0e8] bg-white" style={{ minHeight: "480px" }}>
+          <div className="h-full p-4">
+            {isPdf ? (
+              <iframe src={previewUrl} title={`${file.name} PDF 预览`} className="h-[680px] w-full rounded border-0" />
+            ) : isImage ? (
+              <div className="flex h-full items-center justify-center">
+                <img src={previewUrl} alt={`${file.name} 预览`} className="max-h-full w-full object-contain" />
+              </div>
+            ) : (
+              <div className="flex h-full min-h-[480px] items-center justify-center text-sm text-[#5e6978]">
+                当前文件暂无可预览页面，请查看原始文件。
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DetailEmptyState() {
+  return (
+    <section className="rounded-lg border border-dashed border-[#cfd8e3] bg-white p-6 text-sm text-[#5e6978]">
+      当前文件还没有真实识别问题记录。请先导入并完成检测，或从左侧列表重新选择有问题的文件。
     </section>
   );
 }
@@ -2285,6 +2608,70 @@ function normalizeDatasetPath(value: string) {
   return value.replace(/\\/g, "/").trim();
 }
 
+function normalizeFileToken(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function buildFileSummaries(issues: QualityIssue[], importSummary: QualityImportResponse | null): QualityFileSummary[] {
+  const grouped = new Map<
+    string,
+    {
+      fileName: string;
+      group: string;
+      pageCount: number;
+      issues: QualityIssue[];
+    }
+  >();
+
+  issues.forEach((issue) => {
+    const current = grouped.get(issue.fileName) ?? {
+      fileName: issue.fileName,
+      group: issue.group || "未分组",
+      pageCount: 0,
+      issues: [],
+    };
+    current.group = current.group || issue.group || "未分组";
+    current.pageCount = Math.max(current.pageCount, previewPageCountForIssue(issue), pageNumberFromIssue(issue));
+    current.issues.push(issue);
+    grouped.set(issue.fileName, current);
+  });
+
+  importSummary?.files.forEach((file) => {
+    if (grouped.has(file.name)) return;
+    grouped.set(file.name, {
+      fileName: file.name,
+      group: "未分组",
+      pageCount: 0,
+      issues: [],
+    });
+  });
+
+  return Array.from(grouped.values())
+    .map((entry) => {
+      const statusLabel = complianceLabelForFile(entry.issues);
+      const suggestionLabel =
+        statusLabel === "合格" ? "可直接使用" : statusLabel === "警告" ? "需复核" : "建议剔除";
+      return {
+        fileName: entry.fileName,
+        group: entry.group || "未分组",
+        gender: "未知",
+        pageCount: entry.pageCount > 0 ? `${entry.pageCount}页` : "--",
+        statusLabel,
+        suggestionLabel,
+        detailHref: `/tasks/${encodeURIComponent(entry.fileName)}`,
+      };
+    })
+    .sort((left, right) => left.fileName.localeCompare(right.fileName, "zh-CN"));
+}
+
+function complianceLabelForFile(issues: QualityIssue[]): QualityFileSummary["statusLabel"] {
+  if (issues.some((issue) => issue.status === "confirmed")) return "不合格";
+  if (issues.some((issue) => issue.status === "needs_review" || issue.status === "ai_reviewing" || issue.status === "disputed")) {
+    return "警告";
+  }
+  return "合格";
+}
+
 function mapStoredImportSummary(
   summary:
     | {
@@ -2564,7 +2951,7 @@ function selectPrimaryImportedIssue(issues: QualityIssue[]) {
 
 function mapBackendIssue(issue: BackendQualityIssue, taskId: string): QualityIssue {
   const fileName = issue.file_name;
-  const previewImageUrl = issue.preview_image_url ?? (isImageFile(fileName) ? `/api/quality/import/${taskId}/files/${encodeURIComponent(fileName)}` : undefined);
+  const previewImageUrl = issue.preview_image_url ?? (isImageFile(fileName) ? buildImportedFilePreviewUrl(taskId, fileName) : undefined);
   return {
     id: issue.id,
     index: issue.index,
@@ -2590,6 +2977,10 @@ function mapBackendIssue(issue: BackendQualityIssue, taskId: string): QualityIss
     findingType: issue.finding_type,
     bbox: issue.bbox,
   };
+}
+
+function buildImportedFilePreviewUrl(taskId: string, fileName: string) {
+  return `/api/quality/import/${taskId}/files/${encodeURIComponent(fileName)}`;
 }
 
 function isImageFile(fileName: string) {

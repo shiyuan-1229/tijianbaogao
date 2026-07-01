@@ -1,0 +1,79 @@
+{
+  "dataset_path": "data\\quality\\imports\\quality-import-79d029f44da8",
+  "generated_at": "2026-07-01T06:59:07.569073+00:00",
+  "total_issues": 1,
+  "confirmed_issues": 0,
+  "rejected_issues": 0,
+  "pending_issues": 1,
+  "review_record_count": 0,
+  "evidence_image_count": 0,
+  "sections": [
+    {
+      "key": "third-batch-report",
+      "title": "第三批数据检测报告",
+      "item_count": 1,
+      "description": "覆盖 0 个年龄段、1 份档案、1 个问题。"
+    },
+    {
+      "key": "non-compliant",
+      "title": "不合规问题清单",
+      "item_count": 0,
+      "description": "人工已确认的问题，适合进入不合规导出清单。"
+    },
+    {
+      "key": "possible-compliant",
+      "title": "可能合规清单",
+      "item_count": 0,
+      "description": "人工已驳回的问题，保留为可能合规样本。"
+    },
+    {
+      "key": "needs-review",
+      "title": "需人工复核清单",
+      "item_count": 1,
+      "description": "仍待人工确认或存在争议的问题。"
+    },
+    {
+      "key": "review-records",
+      "title": "人工复核记录",
+      "item_count": 0,
+      "description": "真实人工复核动作与备注记录。"
+    },
+    {
+      "key": "rule-hit-stats",
+      "title": "规则命中统计",
+      "item_count": 1,
+      "description": "按规则 ID 汇总当前数据集的命中次数。"
+    },
+    {
+      "key": "batch-overview-table",
+      "title": "批次总体情况表",
+      "item_count": 1,
+      "description": "按档案汇总合规状态、问题数量和文件完整性，输出 Excel。"
+    },
+    {
+      "key": "structured-data",
+      "title": "结构化数据导出",
+      "item_count": 1,
+      "description": "按档案导出与原始 Excel 相同字段结构的 .xlsx 文件。"
+    },
+    {
+      "key": "compliant-pdfs",
+      "title": "合格 PDF 文件夹",
+      "item_count": 1,
+      "description": "合格PDF/ 子目录存放无问题的 PDF 文件。"
+    },
+    {
+      "key": "issue-detail-reports",
+      "title": "问题详情分析报告",
+      "item_count": 1,
+      "description": "为不合规与待复核报告生成逐份问题分析。"
+    }
+  ],
+  "rule_hits": [
+    {
+      "rule_id": "R-OCR-001",
+      "rule_name": null,
+      "hit_count": 1
+    }
+  ]
+}

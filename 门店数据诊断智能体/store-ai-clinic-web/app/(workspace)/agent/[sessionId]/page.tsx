@@ -5,6 +5,6 @@ export default async function AgentSessionPage({
 }: {
   params: Promise<{ sessionId: string }>;
 }) {
-  await params;
-  return <QualityShell view="detail" liveFromStore />;
+  const { sessionId } = await params;
+  return <QualityShell view="detail" detailFileName={decodeURIComponent(sessionId)} liveFromStore />;
 }

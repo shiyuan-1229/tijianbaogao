@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import hashlib
 import html
 import json
 import re
@@ -170,6 +171,9 @@ class DatasetFile:
 _REVIEW_RECORDS: list[QualityReviewRecord] = []
 _EXPORT_TASKS: list[QualityExportTask] = []
 _ACTION_RECORDS: list[QualityActionRecord] = []
+
+SCAN_CACHE_VERSION = 1
+IMPORT_MANIFEST_NAME = ".quality-import-manifest.json"
 
 
 def scan_quality_dataset(

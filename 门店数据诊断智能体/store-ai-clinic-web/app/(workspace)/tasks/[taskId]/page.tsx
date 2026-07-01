@@ -5,6 +5,6 @@ type TaskDetailPageProps = {
 };
 
 export default async function TaskDetailPage({ params }: TaskDetailPageProps) {
-  await params;
-  return <QualityShell view="detail" liveFromStore />;
+  const { taskId } = await params;
+  return <QualityShell view="detail" detailFileName={decodeURIComponent(taskId)} liveFromStore />;
 }
